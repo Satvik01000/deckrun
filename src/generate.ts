@@ -723,18 +723,6 @@ const CHROME_CSS = `/* ── HUD (progress + counter) ────────�
 
 #kbd-hint.hidden { opacity: 0; }
 
-/* ── Pets ─────────────────────────────────────────────────────────────── */
-.pet {
-  position: fixed;
-  z-index: 50;
-  pointer-events: none;
-  image-rendering: pixelated;
-}
-
-@media print {
-  .pet { display: none !important; }
-}
-
 /* ── Blinking cursor ──────────────────────────────────────────────────── */
 /* Parked where an h1's cap height sits, so it reads as the title's caret. */
 #cursor {
@@ -869,7 +857,7 @@ const CHROME_CSS = `/* ── HUD (progress + counter) ────────�
   .slide__content img { max-height: 4in !important; }
   .slide__content iframe, .slide__content video { max-height: 4in !important; }
 
-  #hud, .nav-arrow, #overview, #kbd-hint, #cursor, #fs-hint, .pet,
+  #hud, .nav-arrow, #overview, #kbd-hint, #cursor, #fs-hint,
   #board, #laser, #blackout, #help, #themes {
     display: none !important;
   }
@@ -2526,6 +2514,21 @@ ${HIGHLIGHT_RUNTIME}
   onClick(elBtnPrev, prev);
   onClick(elBtnNext, next);
 
+  let wheelLock = false;
+  window.addEventListener('wheel', function (e) {
+    if (inOverview || themesOpen() || helpOn || blackOn) return;
+    const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (Math.abs(delta) < 15) return;
+    if (wheelLock) return;
+    wheelLock = true;
+    setTimeout(function () { wheelLock = false; }, 250);
+    if (delta > 0) {
+      next();
+    } else if (delta < 0) {
+      prev();
+    }
+  }, { passive: true });
+
   let touchStartX = 0;
   document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
   document.addEventListener('touchend', (e) => {
@@ -2539,50 +2542,6 @@ ${HIGHLIGHT_RUNTIME}
 
   // ── Hint auto-hide ────────────────────────────────────────────────────
   setTimeout(() => { elHint.classList.add('hidden'); }, 4000);
-
-  // ── Pets ──────────────────────────────────────────────────────────────
-  (function spawnPets() {
-    const petUrls = [
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/turtle/orange_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/turtle/green_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/chicken/white_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/crab/red_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/dog/akita_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/dog/brown_with_ball_8fps.gif?raw=true',
-      'https://github.com/tonybaloney/vscode-pets/blob/main/media/fox/white_with_ball_8fps.gif?raw=true',
-    ];
-
-    const count = 3;
-    const minDist = 100;
-
-    // Shuffle and pick N unique pets
-    const shuffled = petUrls.slice().sort(() => Math.random() - 0.5);
-    const chosen = shuffled.slice(0, count);
-
-    // HUD: 2px progress bar + ~30px counter row. Pets sit just above that.
-    const hudHeight = 34;
-    const bottomOffset = hudHeight;
-
-    // Pick random x positions along the full width, min 100px apart
-    const xPositions = [];
-    let attempts = 0;
-    while (xPositions.length < count && attempts < 2000) {
-      attempts++;
-      const x = 20 + Math.random() * (window.innerWidth - 100);
-      const tooClose = xPositions.some(px => Math.abs(px - x) < minDist);
-      if (!tooClose) xPositions.push(x);
-    }
-
-    chosen.forEach(function(url, i) {
-      const img = document.createElement('img');
-      img.src = url;
-      img.className = 'pet';
-      img.style.left   = xPositions[i] + 'px';
-      img.style.bottom = bottomOffset + 'px';
-      img.style.top    = 'auto';
-      document.body.appendChild(img);
-    });
-  })();
 
   // ── Auto-fullscreen ───────────────────────────────────────────────────
   const fsHint = document.getElementById('fs-hint');
