@@ -86,27 +86,23 @@ span.math-source {
   font-size: 0.85em;
 }
 
-.mermaid {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin: 1.2em auto;
-  max-width: 100%;
-  overflow: hidden;
+.mermaid-container {
+  text-align: center;
+  margin: 1em 0;
 }
 
-.mermaid svg {
+.mermaid-container svg {
   max-width: 100%;
   height: auto;
 }
 
 .mermaid-error {
-  color: var(--maroon, #f38ba8);
-  background: var(--surface0, rgba(255, 0, 0, 0.1));
-  border: 1px solid var(--maroon, #f38ba8);
+  color: #f38ba8;
+  background: rgba(255, 0, 0, 0.08);
+  border: 1px solid #f38ba8;
   border-radius: 6px;
   padding: 12px 16px;
-  font-family: var(--font-mono, monospace);
+  font-family: monospace;
   font-size: 0.9em;
   white-space: pre-wrap;
   margin: 1em 0;
@@ -139,45 +135,52 @@ export const RICH_CONTENT_RUNTIME = `(function () {
     }
 
     // 2. Render Mermaid diagrams
-    var mermaidPromises = [];
     var codeBlocks = root.querySelectorAll('pre code.language-mermaid, pre code.lang-mermaid');
-    if (codeBlocks.length > 0 && window.mermaid) {
-      try {
-        window.mermaid.initialize({
-          startOnLoad: false,
-          theme: 'dark',
-          securityLevel: 'loose'
-        });
-      } catch (e) {}
-
-      for (var j = 0; j < codeBlocks.length; j++) {
-        (function (codeEl) {
-          var preEl = codeEl.closest('pre');
-          if (!preEl || preEl.dataset.rendered) return;
-          preEl.dataset.rendered = 'true';
-          var code = codeEl.textContent || '';
-          var container = document.createElement('div');
-          container.className = 'mermaid';
-          preEl.parentNode.insertBefore(container, preEl);
-          preEl.style.display = 'none';
-
-          var id = 'mermaid-' + Math.random().toString(36).slice(2, 10);
-          var p = window.mermaid.render(id, code)
-            .then(function (res) {
-              container.innerHTML = res.svg;
-              preEl.remove();
-            })
-            .catch(function (err) {
-              container.className = 'mermaid-error';
-              container.textContent = 'Mermaid Error: ' + (err && err.message ? err.message : String(err));
-              preEl.remove();
-            });
-          mermaidPromises.push(p);
-        })(codeBlocks[j]);
-      }
+    if (codeBlocks.length === 0 || !window.mermaid) {
+      return Promise.resolve();
     }
 
-    return Promise.all(mermaidPromises).then(function () {});
+    window.mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+      flowchart: {
+        htmlLabels: false,
+        curve: 'basis'
+      }
+    });
+
+    var promises = [];
+    for (var j = 0; j < codeBlocks.length; j++) {
+      (function (codeEl) {
+        var preEl = codeEl.closest('pre');
+        if (!preEl || preEl.dataset.mermaidDone) return;
+        preEl.dataset.mermaidDone = 'true';
+
+        var code = (codeEl.textContent || '').trim();
+        if (!code) return;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mermaid-container';
+
+        var id = 'mermaid-' + Math.random().toString(36).slice(2, 10);
+        var p = window.mermaid.render(id, code)
+          .then(function (result) {
+            wrapper.innerHTML = result.svg;
+            preEl.parentNode.insertBefore(wrapper, preEl);
+            preEl.remove();
+          })
+          .catch(function (err) {
+            wrapper.className = 'mermaid-error';
+            wrapper.textContent = 'Mermaid error: ' + (err && err.message ? err.message : String(err));
+            preEl.parentNode.insertBefore(wrapper, preEl);
+            preEl.remove();
+          });
+        promises.push(p);
+      })(codeBlocks[j]);
+    }
+
+    return Promise.all(promises).then(function () {});
   };
 })();
 `;

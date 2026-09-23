@@ -277,7 +277,7 @@ export const HIGHLIGHT_RUNTIME = `(function () {
     if (el.hasAttribute && el.hasAttribute('data-dr-ui')) return true;
     // Rendered maths and diagrams keep shadow copies of their own source
     // text; splitting either one apart breaks the render.
-    return !!(el.classList && (el.classList.contains('katex') || el.classList.contains('mermaid')));
+    return !!(el.classList && (el.classList.contains('katex') || el.classList.contains('mermaid-container')));
   }
 
   function textNodes(root) {

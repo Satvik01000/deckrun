@@ -345,7 +345,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   position: absolute;
   inset: 0;
   margin: 0;
-  padding: 18px 20px;
+  padding: 18px 20px 80vh;
   font-family: var(--font-mono);
   font-size: 13.5px;
   font-weight: 400;
@@ -999,7 +999,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   position: absolute;
   inset: 0;
   margin: 0;
-  padding: 18px 20px;
+  padding: 18px 20px 80vh;
   font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.75;
@@ -3651,6 +3651,21 @@ ${HIGHLIGHT_RUNTIME}
     }
   });
 
+  var panePrevWheelLock = false;
+  $('pane-prev').addEventListener('wheel', function (e) {
+    if (state.mode === 'grid') return;
+    var delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (Math.abs(delta) < 15) return;
+    if (panePrevWheelLock) return;
+    panePrevWheelLock = true;
+    setTimeout(function () { panePrevWheelLock = false; }, 250);
+    if (delta > 0) {
+      setIndex(state.index + 1, false);
+    } else if (delta < 0) {
+      setIndex(state.index - 1, false);
+    }
+  }, { passive: true });
+
   // ── Global keys ────────────────────────────────────────────────────────
   function isEditingText() {
     var el = document.activeElement;
@@ -3697,6 +3712,19 @@ ${HIGHLIGHT_RUNTIME}
       return;
     }
 
+    // Option + Control (or Option + Cmd) + arrows/page keys hops between slides (works anywhere, including inside editor)
+    if (e.altKey && (e.ctrlKey || e.metaKey)) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        setIndex(state.index + 1, false);
+        return;
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        setIndex(state.index - 1, false);
+        return;
+      }
+    }
+
     if (mod) {
       var key = e.key.toLowerCase();
       var md = state.kind === 'markdown';
@@ -3718,18 +3746,6 @@ ${HIGHLIGHT_RUNTIME}
 
     if (palette.classList.contains('is-on') || guide.classList.contains('is-on') ||
         $('library').classList.contains('is-on') || menuIsOpen()) {
-      return;
-    }
-
-    // Alt + arrows/page keys hops between slides (works anywhere, including inside the editor).
-    if (e.altKey) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
-        e.preventDefault();
-        setIndex(state.index + 1, false);
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        setIndex(state.index - 1, false);
-      }
       return;
     }
 

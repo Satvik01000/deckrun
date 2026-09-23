@@ -212,7 +212,7 @@ ${RICH_CONTENT_RUNTIME}
       // KaTeX display equations and Mermaid hosts deliberately hide their own
       // overflow to keep a projected slide tidy. Inspect them separately so a
       // clipped formula or diagram still triggers the editor's overflow nudge.
-      var rich = content.querySelectorAll('.katex-display, .mermaid');
+      var rich = content.querySelectorAll('.katex-display, .mermaid-container');
       for (var i = 0; !over && i < rich.length; i++) {
         over = rich[i].scrollHeight - rich[i].clientHeight > 6 ||
           rich[i].scrollWidth - rich[i].clientWidth > 6;
@@ -285,7 +285,35 @@ ${RICH_CONTENT_RUNTIME}
     if (thumb) send({ type: 'goto', index: parseInt(thumb.dataset.index, 10) });
   });
 
+  var wheelLock = false;
+  window.addEventListener('wheel', function (e) {
+    if (mode === 'grid') return;
+    var delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (Math.abs(delta) < 15) return;
+    if (wheelLock) return;
+    wheelLock = true;
+    setTimeout(function () { wheelLock = false; }, 250);
+    if (delta > 0) {
+      send({ type: 'nav', delta: 1 });
+    } else if (delta < 0) {
+      send({ type: 'nav', delta: -1 });
+    }
+  }, { passive: true });
+
   window.addEventListener('keydown', function (e) {
+    // Option + Control (or Option + Cmd) + arrows/page keys hops between slides
+    if (e.altKey && (e.ctrlKey || e.metaKey)) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        send({ type: 'nav', delta: 1 });
+        return;
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        send({ type: 'nav', delta: -1 });
+        return;
+      }
+    }
+
     var mod = e.metaKey || e.ctrlKey;
     if (mod) {
       var k = e.key.toLowerCase();
@@ -335,18 +363,6 @@ ${RICH_CONTENT_RUNTIME}
         nextThumb.scrollIntoView({ block: 'nearest' });
       }
       send({ type: 'index-select', index: index });
-      return;
-    }
-
-    // Single mode: Alt navigation or standard keys
-    if (e.altKey) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
-        e.preventDefault();
-        send({ type: 'nav', delta: 1 });
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        send({ type: 'nav', delta: -1 });
-      }
       return;
     }
 
