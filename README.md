@@ -4,55 +4,48 @@ Write slides in Markdown or bring a self-contained HTML document, run a local se
 
 - **Two formats** - Markdown decks with slide-by-slide presentation, or self-contained HTML documents with continuous scrolling
 - **Live editor** - edit alongside a live preview, with autosave and a library of all your decks and docs
-- **14 themes** - unique palettes, typography, animated backdrops, and customizable heading and body fonts
+- **19 themes** - unique palettes, typography, animated backdrops, Catppuccin flavors (Latte, Frappé, Macchiato, Mocha), Atom One Dark Pro, and customizable heading and body fonts
 - **Templates and motion** - four composition templates and five transitions, switchable without touching the Markdown
-- **Technical content** - KaTeX equations and Mermaid diagrams in preview, presentation, HTML, and PDF
+- **Technical content** - KaTeX equations and Mermaid diagrams (with isolated typography & fence-aware parsing) in preview, presentation, HTML, and PDF
 - **Incremental reveals** - step through bullets, prose, equations, code, or diagrams without duplicating slides
 - **Deck linting** - catch empty slides, broken fences/math, dense content, image issues, and invalid reveal markers locally or in CI
 - **Presenter tools** - laser pointer, drawing pen, blank canvas, blackout mode, and `?` for shortcuts
 - **Highlights and comments** - marker-pen text in the preview or on the projector and hang a note off it, kept in the browser session and gone when the tab closes
 - **Notes while presenting** - present from the editor and its preview and notes panel follow the deck tab, so the editor is your notes screen
 - **Export** - Markdown, HTML, headless-rendered PDF, or a standalone presenter-ready HTML page
-- **Local-first** - binds only to `127.0.0.1`; nothing is uploaded, and your work stays in browser local storage until export
+- **Blazing Fast & Zero Dependencies** - pure Go implementation with embedded assets (KaTeX, Mermaid, fonts). Single standalone binary, sub-millisecond startup, binds locally to `127.0.0.1`.
 
 ![Slide showing a code-heavy presentation with syntax highlighting](https://github.com/user-attachments/assets/e61d23e7-3f35-46c9-95a0-ce4976b6179c)
 
 ## Quick start
 
-Check out the sample Markdown source in [`examples/example-2.md`](https://raw.githubusercontent.com/arpitbbhayani/deckrun/refs/heads/master/examples/example-2.md) and load it directly to see how `deckrun` presents it (no installation required):
+Build and run `deckrun` directly with Go:
 
 ```bash
-npx deckrun
+make build
+./bin/deckrun examples/example-2.md
 ```
 
 ## Installation
 
-Install with a single command. On Linux and macOS the installer bootstraps
-Node.js (>= 16) automatically if it's missing, then installs deckrun from npm:
+### From Source (Go 1.22+)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/arpitbbhayani/deckrun/master/install.sh | sh
+# Clone the repository
+git clone https://github.com/arpitbbhayani/deckrun.git
+cd deckrun
+
+# Build the standalone binary
+make build
+
+# Install to $GOPATH/bin (or symlink to /usr/local/bin or /opt/homebrew/bin)
+make install
 ```
 
-On Windows, the PowerShell installer does the same (installs the Node.js LTS
-via winget, or downloads it, when needed):
-
-```powershell
-irm https://raw.githubusercontent.com/arpitbbhayani/deckrun/master/install.ps1 | iex
-```
-
-Or install globally from npm directly:
+Or install directly with Go:
 
 ```bash
-npm install -g deckrun
-```
-
-Or run it without installing:
-
-```bash
-npx deckrun              # open the editor
-npx deckrun slides.md    # open a local file in the editor, present from there
-npx deckrun <url>        # open a public Markdown or HTML URL in the editor
+go install ./cmd/deckrun
 ```
 
 ## Usage
@@ -1015,38 +1008,29 @@ Worth knowing before you plan a talk around them:
 ## Development
 
 ```bash
-# Install dependencies
-npm install
+# Run unit tests
+make test
 
-# Compile TypeScript to dist/
-npm run build
+# Build the standalone binary
+make build
 
-# Run straight from source
-npm run dev -- examples/example-1.md
+# Run the binary with an example
+./bin/deckrun examples/example-1.md
 
-# Run the editor from source
-npm run dev
+# Install globally to GOPATH/bin
+make install
 ```
 
-`dev` runs the TypeScript through [tsx](https://tsx.is). The `"module": "NodeNext"` setting means the source imports carry `.js` extensions, and neither `ts-node --esm` nor Node's own type stripping remaps those back to the `.ts` files on Node 20 and up — tsx does. Tested on Node 18, 20, 22, and 24.
+The Go source architecture:
 
-The source:
-
-- `src/index.ts` is the CLI, the HTTP server, the editor routes, and port selection
-- `src/parser.ts` splits slides, extracts notes, and resolves image directives
-- `src/themes.ts` is the theme registry: palettes, font catalog, backdrop patterns, and the CSS they all emit
-- `src/presentation-options.ts` is the composition-template and transition registry
-- `src/fragments.ts` contains incremental-reveal styles and DOM preparation shared by preview and presentation
-- `src/lint.ts` implements the static deck authoring rules behind `deckrun lint`
-- `src/rich-content.ts` detects and renders KaTeX and Mermaid content, with a shared readiness signal
-- `src/generate.ts` holds the slide CSS, the presenter chrome, and the deck runtime
-- `src/preview.ts` is the editor's preview iframe, sharing the slide CSS with the deck
-- `src/editor.ts` is the editor page: highlighting, palette, guide, nudges, autosave
-- `src/editor-content.ts` is the snippet registry, tips, and welcome deck that the guide, the palette, and the nudges all read from
-
-The deck and the editor preview share `RESET_CSS`, `SLIDE_CSS`, and `DECOR_CSS` out of `generate.ts`, and their palettes out of `themes.ts`, which is what keeps the preview honest. Change a slide style once and both move together.
-
-Release steps live in [PUBLISHING.md](PUBLISHING.md).
+- `cmd/deckrun/main.go`: CLI entrypoint, argument and flag parsing, subcommands, and browser launcher
+- `internal/assets/`: Embedded vendor assets (KaTeX CSS/JS/fonts, Mermaid JS) via `embed.FS`
+- `internal/parser/`: Fence-aware slide splitting, markdown tokens, KaTeX/Mermaid detection, and Goldmark GFM parsing
+- `internal/theme/`: 19 palettes (including Catppuccin and One Dark Pro), 20 Google fonts, 10 animated decors, templates, and transitions
+- `internal/render/`: HTML generation for editor, preview, presenter, documents, fragment reveals, and typography-isolated Mermaid styles
+- `internal/server/`: HTTP server, SSE live-reloader, file watcher with fsnotify, and static asset handling
+- `internal/pdf/`: Headless Chromium PDF exporter with virtual time budgets
+- `internal/lint/`: Deck authoring linter and rules with stylish and JSON formatters
 
 ## License
 
