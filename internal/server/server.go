@@ -718,6 +718,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	info, err := os.Stat(filePath)
 	if err != nil || info.IsDir() {
+		if pathname == "/favicon.ico" {
+			w.Header().Set("Content-Type", "image/svg+xml")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1e1e2e"/><rect x="8" y="7" width="6" height="18" rx="2" fill="#cba6f7"/><polygon points="17,7 26,16 17,25" fill="#89b4fa"/></svg>`))
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}

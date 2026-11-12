@@ -214,3 +214,28 @@ func TestTypeSizeOptionIsGone(t *testing.T) {
 		t.Errorf("editor contains sizes")
 	}
 }
+
+func TestNoUninterpolatedTemplateLiteralsOrCorruptedRegexes(t *testing.T) {
+	slides := parser.ParseSlides("# One\nBody")
+	surfaces := map[string]string{
+		"deck":    render.GenerateHTML(slides, "Deck", false, "nord", render.FontOverrides{}, render.PresentationOptions{}),
+		"doc":     render.GenerateDocHTML("/?deck=1", "Doc", false, "nord"),
+		"preview": render.GeneratePreviewHTML("nord", render.FontOverrides{}, "classic", "slide"),
+		"editor":  render.GenerateEditorHTML("nord", render.FontOverrides{}, "classic", "slide", nil),
+	}
+
+	for name, htmlStr := range surfaces {
+		for _, forbidden := range []string{"${PREVIEW_WIDTH}", "${PREVIEW_HEIGHT}", "${theme}", "${hljsMapJson()}", "${decorMapJson()}", "${JSON.stringify(FONT_IDS)}"} {
+			if strings.Contains(htmlStr, forbidden) {
+				t.Errorf("%s contains un-interpolated JS template literal '%s'", name, forbidden)
+			}
+		}
+		if strings.Contains(htmlStr, `'\\201C'`) {
+			t.Errorf("%s contains double-escaped CSS unicode quote '\\\\201C'", name)
+		}
+		if strings.Contains(htmlStr, `/!\\[`) {
+			t.Errorf("%s contains double-escaped JS regex '/!\\\\['", name)
+		}
+	}
+}
+

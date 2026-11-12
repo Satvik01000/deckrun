@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"fmt"
 	"html"
 	"regexp"
 	"strconv"
@@ -135,10 +136,20 @@ func isDashesDivider(line string) bool {
 }
 
 // TokenizeMathAndReveal handles block math, inline math, and reveal markers
-// while preserving code fences so math/reveal inside code is not touched.
-func TokenizeMathAndReveal(src string) string {
+// while preserving code fences and inline code spans so math/reveal inside code
+// is not touched, and holding math HTML in placeholders so Goldmark does not
+// mangle *, _, or \ inside LaTeX formulas.
+func TokenizeMathAndReveal(src string) (string, []string) {
 	lines := strings.Split(src, "\n")
 	var out []string
+	var held []string
+
+	hold := func(tag, htmlStr string) string {
+		idx := len(held)
+		held = append(held, htmlStr)
+		return fmt.Sprintf(`<%s data-dr-hold="%d"></%s>`, tag, idx, tag)
+	}
+
 	inFence := false
 	fenceMarker := ""
 
@@ -166,15 +177,14 @@ func TokenizeMathAndReveal(src string) string {
 
 		// Handle multiline or single-line display math $$...$$ outside fence
 		if strings.HasPrefix(trimmed, "$$") {
-			// Check if closed on same line: $$formula$$
 			rest := strings.TrimSpace(trimmed[2:])
 			if strings.HasSuffix(rest, "$$") && len(rest) >= 2 {
 				formula := strings.TrimSuffix(rest, "$$")
-				out = append(out, `<div class="math-source" data-display="true">`+html.EscapeString(strings.TrimSpace(formula))+`</div>`, "")
+				blockHTML := `<div class="math-source" data-display="true">` + html.EscapeString(strings.TrimSpace(formula)) + `</div>`
+				out = append(out, hold("div", blockHTML), "")
 				continue
 			}
 
-			// Multiline $$ block
 			var mathLines []string
 			if len(rest) > 0 {
 				mathLines = append(mathLines, rest)
@@ -195,7 +205,8 @@ func TokenizeMathAndReveal(src string) string {
 			}
 			if closed {
 				formula := strings.Join(mathLines, "\n")
-				out = append(out, `<div class="math-source" data-display="true">`+html.EscapeString(strings.TrimSpace(formula))+`</div>`, "")
+				blockHTML := `<div class="math-source" data-display="true">` + html.EscapeString(strings.TrimSpace(formula)) + `</div>`
+				out = append(out, hold("div", blockHTML), "")
 				continue
 			}
 		}
@@ -205,7 +216,8 @@ func TokenizeMathAndReveal(src string) string {
 			rest := strings.TrimSpace(trimmed[2:])
 			if strings.HasSuffix(rest, `\]`) && len(rest) >= 2 {
 				formula := strings.TrimSuffix(rest, `\]`)
-				out = append(out, `<div class="math-source" data-display="true">`+html.EscapeString(strings.TrimSpace(formula))+`</div>`, "")
+				blockHTML := `<div class="math-source" data-display="true">` + html.EscapeString(strings.TrimSpace(formula)) + `</div>`
+				out = append(out, hold("div", blockHTML), "")
 				continue
 			}
 			var mathLines []string
@@ -228,41 +240,101 @@ func TokenizeMathAndReveal(src string) string {
 			}
 			if closed {
 				formula := strings.Join(mathLines, "\n")
-				out = append(out, `<div class="math-source" data-display="true">`+html.EscapeString(strings.TrimSpace(formula))+`</div>`, "")
+				blockHTML := `<div class="math-source" data-display="true">` + html.EscapeString(strings.TrimSpace(formula)) + `</div>`
+				out = append(out, hold("div", blockHTML), "")
 				continue
 			}
 		}
 
-		// Process inline reveal markers: {reveal}
-		line = strings.ReplaceAll(line, "{reveal}", `<span class="deckrun-fragment-marker" aria-hidden="true"></span>`)
-
-		// Process inline math: $...$ or \(...\)
-		line = replaceInlineMath(line)
+		// Process inline code spans, {reveal} markers, and inline math ($...$ and \(...\))
+		line = tokenizeInlineLine(line, func(htmlStr string) string {
+			return hold("span", htmlStr)
+		})
 
 		out = append(out, line)
 	}
 
-	return strings.Join(out, "\n")
+	return strings.Join(out, "\n"), held
 }
 
-var inlineParenMath = regexp.MustCompile(`\\\(((?:\\.|[^\\\n])*?)\\\)`)
+func restoreHeldTokens(rendered string, held []string) string {
+	for idx, h := range held {
+		spanPlaceholder := fmt.Sprintf(`<span data-dr-hold="%d"></span>`, idx)
+		divPlaceholder := fmt.Sprintf(`<div data-dr-hold="%d"></div>`, idx)
+		rendered = strings.ReplaceAll(rendered, spanPlaceholder, h)
+		rendered = strings.ReplaceAll(rendered, divPlaceholder, h)
+	}
+	return rendered
+}
 
-func replaceInlineMath(line string) string {
-	// First handle \( ... \)
-	line = inlineParenMath.ReplaceAllStringFunc(line, func(m string) string {
-		sub := inlineParenMath.FindStringSubmatch(m)
-		if len(sub) > 1 {
-			return `<span class="math-source" data-display="false">` + html.EscapeString(sub[1]) + `</span>`
-		}
-		return m
-	})
-
-	// Scan for $...$
+func tokenizeInlineLine(line string, holdInline func(string) string) string {
 	var sb strings.Builder
 	n := len(line)
 	i := 0
 
 	for i < n {
+		// 1. Skip inline code spans (`...` or ``...``) so math/reveal inside backticks stay literal
+		if line[i] == '`' {
+			tickCount := 0
+			for i+tickCount < n && line[i+tickCount] == '`' {
+				tickCount++
+			}
+			ticks := line[i : i+tickCount]
+			closeIdx := -1
+			searchFrom := i + tickCount
+			for searchFrom < n {
+				rel := strings.Index(line[searchFrom:], ticks)
+				if rel < 0 {
+					break
+				}
+				cand := searchFrom + rel
+				// Ensure exact tickCount match (not part of a longer run of backticks)
+				afterCand := cand + tickCount
+				if afterCand < n && line[afterCand] == '`' {
+					for afterCand < n && line[afterCand] == '`' {
+						afterCand++
+					}
+					searchFrom = afterCand
+					continue
+				}
+				closeIdx = cand
+				break
+			}
+			if closeIdx != -1 {
+				sb.WriteString(line[i : closeIdx+tickCount])
+				i = closeIdx + tickCount
+				continue
+			}
+			sb.WriteString(ticks)
+			i += tickCount
+			continue
+		}
+
+		// 2. Check for {reveal}
+		if strings.HasPrefix(line[i:], "{reveal}") {
+			sb.WriteString(holdInline(`<span class="deckrun-fragment-marker" aria-hidden="true"></span>`))
+			i += len("{reveal}")
+			continue
+		}
+
+		// 3. Check for \( ... \) inline math
+		if strings.HasPrefix(line[i:], `\(`) {
+			end := -1
+			for j := i + 2; j+1 < n; j++ {
+				if line[j] == '\\' && line[j+1] == ')' {
+					end = j
+					break
+				}
+			}
+			if end != -1 {
+				formula := line[i+2 : end]
+				sb.WriteString(holdInline(`<span class="math-source" data-display="false">` + html.EscapeString(formula) + `</span>`))
+				i = end + 2
+				continue
+			}
+		}
+
+		// 4. Check for $ ... $ inline math
 		if line[i] == '$' {
 			// Escaped \$
 			if i > 0 && line[i-1] == '\\' {
@@ -293,8 +365,6 @@ func replaceInlineMath(line string) string {
 					if line[j-1] != ' ' && line[j-1] != '\t' {
 						// Closing $ must not be followed by a digit (currency heuristic: $5 and $10)
 						if j+1 < n && line[j+1] >= '0' && line[j+1] <= '9' {
-							// This $ is followed by a digit (like $10). It cannot close math,
-							// AND since an unescaped $ cannot be inside math, the search must abort.
 							break
 						}
 						// Must not be followed by $ (e.g. $$)
@@ -304,7 +374,6 @@ func replaceInlineMath(line string) string {
 						end = j
 						break
 					} else {
-						// Found a $, but it was preceded by a space. Unescaped $ cannot be inside math.
 						break
 					}
 				}
@@ -312,7 +381,7 @@ func replaceInlineMath(line string) string {
 
 			if end != -1 {
 				formula := line[i+1 : end]
-				sb.WriteString(`<span class="math-source" data-display="false">` + html.EscapeString(formula) + `</span>`)
+				sb.WriteString(holdInline(`<span class="math-source" data-display="false">` + html.EscapeString(formula) + `</span>`))
 				i = end + 1
 				continue
 			}
@@ -325,23 +394,27 @@ func replaceInlineMath(line string) string {
 	return sb.String()
 }
 
-// ParseSlides parses a markdown string into slides with positioned images, notes,
-// and rendered HTML.
-func ParseSlides(markdown string) []Slide {
-	rawSlides := SplitSlides(markdown)
-	slides := make([]Slide, 0, len(rawSlides))
+// stripNotesAndPositionedImages extracts speaker notes and positioned images
+// only from content outside fenced code blocks, so code examples in slides
+// (like the Welcome Deck's markdown image syntax example) are never stripped.
+func extractNotesAndPositionedImages(raw string, slide *Slide) string {
+	lines := strings.Split(raw, "\n")
+	var outLines []string
+	var nonFenceBuf []string
 
-	for _, raw := range rawSlides {
-		slide := Slide{}
+	flushNonFence := func() {
+		if len(nonFenceBuf) == 0 {
+			return
+		}
+		chunk := strings.Join(nonFenceBuf, "\n")
+		nonFenceBuf = nil
 
-		// Extract speaker notes
-		if m := notesRegex.FindStringSubmatch(raw); len(m) > 1 {
+		if m := notesRegex.FindStringSubmatch(chunk); len(m) > 1 {
 			slide.Notes = strings.TrimSpace(m[1])
 		}
-		processedMd := notesRegex.ReplaceAllString(raw, "")
+		chunk = notesRegex.ReplaceAllString(chunk, "")
 
-		// Find positioned images via title attribute: ![alt](src "right opacity:0.7")
-		matches := imgRegex.FindAllStringSubmatch(raw, -1)
+		matches := imgRegex.FindAllStringSubmatch(chunk, -1)
 		for _, m := range matches {
 			full := m[0]
 			alt := m[1]
@@ -361,25 +434,69 @@ func ParseSlides(markdown string) []Slide {
 			switch pos {
 			case "bg":
 				slide.BGImage = img
-				processedMd = strings.Replace(processedMd, full, "", 1)
+				chunk = strings.Replace(chunk, full, "", 1)
 			case "right":
 				slide.RightImage = img
-				processedMd = strings.Replace(processedMd, full, "", 1)
+				chunk = strings.Replace(chunk, full, "", 1)
 			case "left":
 				slide.LeftImage = img
-				processedMd = strings.Replace(processedMd, full, "", 1)
+				chunk = strings.Replace(chunk, full, "", 1)
 			}
 		}
+		outLines = append(outLines, chunk)
+	}
+
+	inFence := false
+	fenceMarker := ""
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			prefix := trimmed[:3]
+			if !inFence {
+				flushNonFence()
+				inFence = true
+				fenceMarker = prefix
+				outLines = append(outLines, line)
+				continue
+			} else if strings.HasPrefix(trimmed, fenceMarker) {
+				inFence = false
+				fenceMarker = ""
+				outLines = append(outLines, line)
+				continue
+			}
+		}
+		if inFence {
+			outLines = append(outLines, line)
+		} else {
+			nonFenceBuf = append(nonFenceBuf, line)
+		}
+	}
+	flushNonFence()
+
+	return strings.Join(outLines, "\n")
+}
+
+// ParseSlides parses a markdown string into slides with positioned images, notes,
+// and rendered HTML.
+func ParseSlides(markdown string) []Slide {
+	rawSlides := SplitSlides(markdown)
+	slides := make([]Slide, 0, len(rawSlides))
+
+	for _, raw := range rawSlides {
+		slide := Slide{}
+
+		processedMd := extractNotesAndPositionedImages(raw, &slide)
 
 		// Tokenize math & reveal markers before Markdown conversion
-		tokenized := TokenizeMathAndReveal(strings.TrimSpace(processedMd))
+		tokenized, held := TokenizeMathAndReveal(strings.TrimSpace(processedMd))
 
 		// Render Markdown with Goldmark
 		var buf bytes.Buffer
 		if err := mdRenderer.Convert([]byte(tokenized), &buf); err != nil {
 			slide.HTML = html.EscapeString(tokenized)
 		} else {
-			slide.HTML = strings.TrimSpace(buf.String())
+			slide.HTML = restoreHeldTokens(strings.TrimSpace(buf.String()), held)
 		}
 
 		slides = append(slides, slide)
@@ -398,22 +515,28 @@ func DeckTitle(slides []Slide, fallback string) string {
 		if m := headingRegex.FindStringSubmatch(slides[0].HTML); len(m) > 1 {
 			text := strings.TrimSpace(htmlTagRegex.ReplaceAllString(m[1], ""))
 			if text != "" {
-				return text
+				return html.UnescapeString(text)
 			}
 		}
 	}
 	return fallback
 }
 
-// DocTitle returns an HTML document's <title> text, falling back to fallback.
-var titleTagRegex = regexp.MustCompile(`(?i)<title[^>]*>([\s\S]*?)</title>`)
+var docTitleRegex = regexp.MustCompile(`(?i)<title[^>]*>([\s\S]*?)</title>`)
 
-func DocTitle(htmlStr string, fallback string) string {
-	if m := titleTagRegex.FindStringSubmatch(htmlStr); len(m) > 1 {
+func DocTitle(rawHTML string, fallback string) string {
+	if m := docTitleRegex.FindStringSubmatch(rawHTML); len(m) > 1 {
 		text := strings.TrimSpace(htmlTagRegex.ReplaceAllString(m[1], ""))
 		if text != "" {
-			return text
+			return html.UnescapeString(text)
+		}
+	}
+	if m := headingRegex.FindStringSubmatch(rawHTML); len(m) > 1 {
+		text := strings.TrimSpace(htmlTagRegex.ReplaceAllString(m[1], ""))
+		if text != "" {
+			return html.UnescapeString(text)
 		}
 	}
 	return fallback
 }
+

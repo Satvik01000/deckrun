@@ -674,6 +674,9 @@ const PresenterScript = `(function () {
     if (hljsLink && hljsMap[id]) {
       hljsLink.href = hljsMap[id];
     }
+    if (window.deckrunRenderRichContent) {
+      window.deckrunRenderRichContent(document.getElementById('presentation'));
+    }
     updateThemePenColors();
     if (remember !== false) {
       try { localStorage.setItem('deckrun.theme.v1', id); } catch (e) {}
@@ -1813,12 +1816,12 @@ const DocScript = `(function () {
   function attachToFrame() {
     try {
       if (elFrame.contentDocument && elFrame.contentDocument.documentElement) {
-        elFrame.contentDocument.documentElement.dataset.theme = document.documentElement.dataset.theme || '${theme}';
+        elFrame.contentDocument.documentElement.dataset.theme = document.documentElement.dataset.theme || 'nord';
       }
     } catch (err) {}
     try {
       if (elFrame.contentWindow) {
-        elFrame.contentWindow.postMessage({ type: 'theme', theme: document.documentElement.dataset.theme || '${theme}' }, '*');
+        elFrame.contentWindow.postMessage({ type: 'theme', theme: document.documentElement.dataset.theme || 'nord' }, '*');
       }
     } catch (err) {}
     try {

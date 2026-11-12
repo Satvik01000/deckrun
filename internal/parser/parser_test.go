@@ -138,3 +138,34 @@ func TestCurrencyVersusInlineMath(t *testing.T) {
 		t.Errorf("formula not converted to inline math: %s", slides[0].HTML)
 	}
 }
+
+func TestCodeSpansAndFencedImagesAndComplexMath(t *testing.T) {
+	md := "# Edge Cases\n" +
+		"Inline code `$x$` and `{reveal}` vs $2 *x* y$ and $\\text{foo}_1 + \\text{bar}_2$\n\n" +
+		"```markdown\n" +
+		"![Diagram](diagram.png \"right\")\n" +
+		"![Cover](cover.png \"bg opacity:0.25\")\n" +
+		"```\n"
+
+	slides := parser.ParseSlides(md)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	s := slides[0]
+	if s.RightImage != nil || s.BGImage != nil {
+		t.Errorf("images inside fenced code block should not be extracted as slide positioned images")
+	}
+	if !strings.Contains(s.HTML, "<code>$x$</code>") {
+		t.Errorf("inline code $x$ should stay literal: %s", s.HTML)
+	}
+	if !strings.Contains(s.HTML, "<code>{reveal}</code>") {
+		t.Errorf("inline code {reveal} should stay literal: %s", s.HTML)
+	}
+	if !strings.Contains(s.HTML, `<span class="math-source" data-display="false">2 *x* y</span>`) {
+		t.Errorf("math with * should not be turned into <em>: %s", s.HTML)
+	}
+	if !strings.Contains(s.HTML, `<span class="math-source" data-display="false">\text{foo}_1 + \text{bar}_2</span>`) {
+		t.Errorf("math with _ should not be turned into <em>: %s", s.HTML)
+	}
+}
+

@@ -354,7 +354,7 @@ html, body {
 }
 
 .slide__content blockquote::before {
-  content: '\\201C';
+  content: '\201C';
   position: absolute;
   /* em here is the glyph's own 2.6em, not the quote's. */
   left: 0.16em;

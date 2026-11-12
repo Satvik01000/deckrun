@@ -101,22 +101,18 @@ func killTree(cmd *exec.Cmd) {
 	}
 }
 
-func waitForPDF(out string, hasExited func() bool, spawnErr func() error) ([]byte, error) {
+func waitForPDF(out string, hasExited func() bool) ([]byte, error) {
 	deadline := time.Now().Add(renderTimeout)
 	lastSize := int64(-1)
 
 	for time.Now().Before(deadline) {
-		if err := spawnErr(); err != nil {
-			return nil, err
-		}
-
 		info, err := os.Stat(out)
 		size := int64(-1)
 		if err == nil {
 			size = info.Size()
 		}
 
-		if size > 0 && size == lastSize {
+		if size > 0 && (size == lastSize || hasExited()) {
 			return os.ReadFile(out)
 		}
 		lastSize = size
@@ -173,17 +169,15 @@ func RenderPDF(urlStr string, browser string) ([]byte, error) {
 
 	exited := false
 	var exitMu sync.Mutex
-	var runErr error
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("could not run %s: %w", browser, err)
 	}
 
 	go func() {
-		err := cmd.Wait()
+		_ = cmd.Wait()
 		exitMu.Lock()
 		exited = true
-		runErr = err
 		exitMu.Unlock()
 	}()
 
@@ -193,15 +187,9 @@ func RenderPDF(urlStr string, browser string) ([]byte, error) {
 		return exited
 	}
 
-	getErr := func() error {
-		exitMu.Lock()
-		defer exitMu.Unlock()
-		return runErr
-	}
-
 	defer killTree(cmd)
 
-	return waitForPDF(out, isExited, getErr)
+	return waitForPDF(out, isExited)
 }
 
 var pdfMu sync.Mutex

@@ -152,14 +152,27 @@ const RichContentRuntime = `(function () {
     }
 
     // 2. Render Mermaid diagrams (Bug 4 & Bug 5 Fixes)
-    var codeBlocks = root.querySelectorAll('pre code.language-mermaid, pre code.lang-mermaid');
-    if (codeBlocks.length === 0 || !window.mermaid) {
+    var codeBlocks = Array.from(root.querySelectorAll('pre code.language-mermaid, pre code.lang-mermaid'));
+    var existingContainers = Array.from(root.querySelectorAll('.mermaid-container[data-mermaid-code]'));
+    if ((codeBlocks.length === 0 && existingContainers.length === 0) || !window.mermaid) {
       return Promise.resolve();
     }
 
     var lightThemes = ['daylight', 'paper', 'solarized', 'rosequartz', 'swiss', 'arctic', 'catppuccin-latte'];
     var curTheme = document.documentElement.dataset.theme || '';
     var isLight = lightThemes.indexOf(curTheme) !== -1;
+    var targetMood = isLight ? 'light' : 'dark';
+
+    var needReinit = false;
+    var staleContainers = existingContainers.filter(function (c) {
+      return c.dataset.mermaidMood !== targetMood;
+    });
+    if (codeBlocks.length > 0 || staleContainers.length > 0) {
+      needReinit = true;
+    }
+    if (!needReinit) {
+      return Promise.resolve();
+    }
 
     try {
       window.mermaid.initialize({
@@ -167,13 +180,36 @@ const RichContentRuntime = `(function () {
         theme: isLight ? 'default' : 'dark',
         securityLevel: 'loose',
         flowchart: {
-          htmlLabels: true,
+          htmlLabels: false,
           curve: 'basis'
         }
       });
     } catch (e) {}
 
     var promises = [];
+
+    function renderIntoWrapper(wrapper, code) {
+      wrapper.dataset.mermaidCode = code;
+      wrapper.dataset.mermaidMood = targetMood;
+      var randId = 'mermaid-' + Math.random().toString(36).slice(2, 10);
+      var p = window.mermaid.render(randId, code)
+        .then(function (result) {
+          wrapper.classList.remove('mermaid-error');
+          if (!wrapper.classList.contains('mermaid-container')) {
+            wrapper.classList.add('mermaid-container');
+          }
+          wrapper.innerHTML = result.svg;
+        })
+        .catch(function (err) {
+          var stray = document.getElementById('d' + randId);
+          if (stray) stray.remove();
+
+          wrapper.className = 'mermaid-error';
+          wrapper.textContent = 'Mermaid error: ' + (err && err.message ? err.message : String(err));
+        });
+      promises.push(p);
+    }
+
     for (var j = 0; j < codeBlocks.length; j++) {
       (function (codeEl) {
         var preEl = codeEl.closest('pre');
@@ -185,26 +221,21 @@ const RichContentRuntime = `(function () {
 
         var wrapper = document.createElement('div');
         wrapper.className = 'mermaid-container';
+        if (preEl.classList.contains('fragment')) wrapper.classList.add('fragment');
+        if (preEl.classList.contains('is-visible')) wrapper.classList.add('is-visible');
+        if (preEl.classList.contains('is-revealed')) wrapper.classList.add('is-revealed');
+        if (preEl.hasAttribute('aria-hidden')) {
+          wrapper.setAttribute('aria-hidden', preEl.getAttribute('aria-hidden'));
+        }
 
-        var randId = 'mermaid-' + Math.random().toString(36).slice(2, 10);
-        var p = window.mermaid.render(randId, code)
-          .then(function (result) {
-            wrapper.innerHTML = result.svg;
-            preEl.parentNode.insertBefore(wrapper, preEl);
-            preEl.remove();
-          })
-          .catch(function (err) {
-            // Clean up any stray error container attached to body by mermaid
-            var stray = document.getElementById('d' + randId);
-            if (stray) stray.remove();
-
-            wrapper.className = 'mermaid-error';
-            wrapper.textContent = 'Mermaid error: ' + (err && err.message ? err.message : String(err));
-            preEl.parentNode.insertBefore(wrapper, preEl);
-            preEl.remove();
-          });
-        promises.push(p);
+        preEl.parentNode.insertBefore(wrapper, preEl);
+        preEl.remove();
+        renderIntoWrapper(wrapper, code);
       })(codeBlocks[j]);
+    }
+
+    for (var k = 0; k < staleContainers.length; k++) {
+      renderIntoWrapper(staleContainers[k], staleContainers[k].dataset.mermaidCode);
     }
 
     return Promise.all(promises).then(function () {});
