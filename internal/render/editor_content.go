@@ -1,0 +1,109 @@
+package render
+
+var SnippetGroups = []string{"Slides", "Text", "Lists & tables", "Code", "Math & diagrams", "Images", "Embeds", "Actions"}
+
+var SnippetGroupsJSON = "[\"Slides\",\"Text\",\"Lists & tables\",\"Code\",\"Math & diagrams\",\"Images\",\"Embeds\",\"Actions\"]"
+
+var SnippetsJSON = "[{\"id\":\"slide-break\",\"group\":\"Slides\",\"label\":\"New slide\",\"hint\":\"Three dashes on their own line end one slide and start the next.\",\"syntax\":\"---\",\"insert\":\"\\n---\\n\\n## {caret}\\n\",\"keys\":\"Cmd D\"},{\"id\":\"slide-title\",\"group\":\"Slides\",\"label\":\"Title slide\",\"hint\":\"An h1 reads largest and in mauve. Use it for the opener and section breaks.\",\"syntax\":\"# Title\\\\n\\\\nSubtitle line\",\"insert\":\"# {caret}\\n\\nOne line that frames the talk.\\n\",\"block\":true},{\"id\":\"slide-section\",\"group\":\"Slides\",\"label\":\"Section divider\",\"hint\":\"A slide holding nothing but an h1 gives the audience a beat to reset.\",\"syntax\":\"# Part 2\",\"insert\":\"\\n---\\n\\n# {caret}\\n\"},{\"id\":\"slide-notes\",\"group\":\"Slides\",\"label\":\"Speaker notes\",\"hint\":\"Stripped from the slide and the PDF. Shown under the preview while you write.\",\"syntax\":\"<!-- notes: what to say here -->\",\"insert\":\"\\n<!-- notes: {caret} -->\\n\"},{\"id\":\"reveal-item\",\"group\":\"Slides\",\"label\":\"Reveal step\",\"hint\":\"Add the marker to a bullet or paragraph. Advance reveals it before changing slides.\",\"syntax\":\"- next point {reveal}\",\"insert\":\"{sel} {reveal}\"},{\"id\":\"reveal-block\",\"group\":\"Slides\",\"label\":\"Reveal next block\",\"hint\":\"A marker on its own line reveals the equation, code block, diagram, or paragraph after it.\",\"syntax\":\"{reveal}\\\\n```mermaid\",\"insert\":\"{reveal}\\n{caret}\",\"block\":true},{\"id\":\"h2\",\"group\":\"Text\",\"label\":\"Slide title (h2)\",\"hint\":\"Blue, the workhorse heading for a content slide.\",\"syntax\":\"## Slide title\",\"insert\":\"## {caret}\"},{\"id\":\"h3\",\"group\":\"Text\",\"label\":\"Subheading (h3)\",\"hint\":\"Sky blue, for splitting a slide into two named halves.\",\"syntax\":\"### Subheading\",\"insert\":\"### {caret}\"},{\"id\":\"bold\",\"group\":\"Text\",\"label\":\"Bold\",\"hint\":\"Renders peach. Reserve it for the one term that has to land.\",\"syntax\":\"**term**\",\"insert\":\"**{sel}**\",\"keys\":\"Cmd B\"},{\"id\":\"italic\",\"group\":\"Text\",\"label\":\"Italic\",\"hint\":\"Muted grey, right for an aside or a caveat.\",\"syntax\":\"*aside*\",\"insert\":\"*{sel}*\",\"keys\":\"Cmd I\"},{\"id\":\"inline-code\",\"group\":\"Text\",\"label\":\"Inline code\",\"hint\":\"Green chip. Use it for identifiers, flags, paths, and config keys.\",\"syntax\":\"`fsync()`\",\"insert\":\"`{sel}`\",\"keys\":\"Cmd E\"},{\"id\":\"quote\",\"group\":\"Text\",\"label\":\"Blockquote\",\"hint\":\"Mauve rule on a tinted background. Good for the insight in one sentence.\",\"syntax\":\"> the log is the source of truth\",\"insert\":\"> {caret}\",\"block\":true},{\"id\":\"link\",\"group\":\"Text\",\"label\":\"Link\",\"hint\":\"Blue with an underline. Clickable while presenting.\",\"syntax\":\"[label](https://example.com)\",\"insert\":\"[{sel}](https://{caret})\",\"keys\":\"Cmd K\"},{\"id\":\"kbd\",\"group\":\"Text\",\"label\":\"Keyboard key\",\"hint\":\"Raw HTML renders as a physical key cap. Handy for demo instructions.\",\"syntax\":\"<kbd>Cmd</kbd>\",\"insert\":\"<kbd>{sel}</kbd>\"},{\"id\":\"mark\",\"group\":\"Text\",\"label\":\"Highlight\",\"hint\":\"Yellow underline on a tinted background, for the number that matters.\",\"syntax\":\"<mark>42ms</mark>\",\"insert\":\"<mark>{sel}</mark>\"},{\"id\":\"rule\",\"group\":\"Text\",\"label\":\"Horizontal rule\",\"hint\":\"A rule inside a slide. Never use --- for this, it breaks the slide.\",\"syntax\":\"***\",\"insert\":\"\\n***\\n\"},{\"id\":\"bullets\",\"group\":\"Lists & tables\",\"label\":\"Bullet list\",\"hint\":\"Mauve markers. Seven bullets is about the ceiling for a projected slide.\",\"syntax\":\"- point\",\"insert\":\"- {caret}\\n- \\n- \",\"block\":true},{\"id\":\"numbered\",\"group\":\"Lists & tables\",\"label\":\"Numbered list\",\"hint\":\"Use it when order carries meaning, like the steps of a protocol.\",\"syntax\":\"1. first\",\"insert\":\"1. {caret}\\n2. \\n3. \",\"block\":true},{\"id\":\"nested\",\"group\":\"Lists & tables\",\"label\":\"Nested list\",\"hint\":\"Two spaces per level. One level of nesting is usually enough.\",\"syntax\":\"- parent\\\\n  - child\",\"insert\":\"- {caret}\\n  - \\n  - \",\"block\":true},{\"id\":\"table\",\"group\":\"Lists & tables\",\"label\":\"Table\",\"hint\":\"Lavender headers, mauve underline, zebra rows. Ideal for benchmarks.\",\"syntax\":\"| col | col |\",\"insert\":\"| Config | Throughput | p99 |\\n| ------ | ---------- | --- |\\n| {caret} |  |  |\\n|  |  |  |\",\"block\":true},{\"id\":\"code-go\",\"group\":\"Code\",\"label\":\"Code block (Go)\",\"hint\":\"Tag the language and Highlight.js picks the right grammar.\",\"syntax\":\"```go\",\"insert\":\"```go\\n{caret}\\n```\",\"block\":true},{\"id\":\"code-ts\",\"group\":\"Code\",\"label\":\"Code block (TypeScript)\",\"hint\":\"Long lines scroll sideways instead of reflowing mid-talk.\",\"syntax\":\"```typescript\",\"insert\":\"```typescript\\n{caret}\\n```\",\"block\":true},{\"id\":\"code-sql\",\"group\":\"Code\",\"label\":\"Code block (SQL)\",\"hint\":\"Trim to the clause that makes the point. No boilerplate.\",\"syntax\":\"```sql\",\"insert\":\"```sql\\n{caret}\\n```\",\"block\":true},{\"id\":\"code-bash\",\"group\":\"Code\",\"label\":\"Code block (shell)\",\"hint\":\"Use it for the command you want the audience to copy.\",\"syntax\":\"```bash\",\"insert\":\"```bash\\n{caret}\\n```\",\"block\":true},{\"id\":\"code-plain\",\"group\":\"Code\",\"label\":\"ASCII diagram\",\"hint\":\"An untagged block keeps spacing exact. Boxes and arrows beat prose.\",\"syntax\":\"```text\",\"insert\":\"```text\\nClient --> [ LB ] --> [ App ] --> [ DB ]\\n{caret}\\n```\",\"block\":true},{\"id\":\"math-inline\",\"group\":\"Math & diagrams\",\"label\":\"Inline math\",\"hint\":\"KaTeX renders the expression in the surrounding sentence.\",\"syntax\":\"$E = mc^2$\",\"insert\":\"${caret}E = mc^2$\"},{\"id\":\"math-display\",\"group\":\"Math & diagrams\",\"label\":\"Display equation\",\"hint\":\"Double dollar delimiters center a standalone equation.\",\"syntax\":\"$$\\\\sum_{i=1}^{n} x_i$$\",\"insert\":\"$$\\n\\\\sum_{i=1}^{n} x_i = \\\\frac{n(n+1)}{2}\\n$$\",\"block\":true},{\"id\":\"mermaid-flowchart\",\"group\":\"Math & diagrams\",\"label\":\"Mermaid flowchart\",\"hint\":\"Rendered in the preview, presentation, HTML export, and PDF.\",\"syntax\":\"```mermaid\\ngraph LR\",\"insert\":\"```mermaid\\ngraph LR\\n  A[Input] --> B{Valid?}\\n  B -->|yes| C[Process]\\n  B -->|no| D[Reject]\\n```\",\"block\":true},{\"id\":\"mermaid-sequence\",\"group\":\"Math & diagrams\",\"label\":\"Mermaid sequence\",\"hint\":\"Use a sequence diagram for request, event, and protocol flows.\",\"syntax\":\"```mermaid\\nsequenceDiagram\",\"insert\":\"```mermaid\\nsequenceDiagram\\n  Client->>API: Request\\n  API->>Store: Read\\n  Store-->>API: Result\\n  API-->>Client: Response\\n```\",\"block\":true},{\"id\":\"img-inline\",\"group\":\"Images\",\"label\":\"Inline image\",\"hint\":\"Path resolves against the folder you launched in. Centered, capped at 55% of the slide height.\",\"syntax\":\"![alt](diagram.png)\",\"insert\":\"![{sel}](diagram.png)\"},{\"id\":\"img-right\",\"group\":\"Images\",\"label\":\"Split: image right\",\"hint\":\"Text takes the left half, the image fills the right. The best default for a diagram.\",\"syntax\":\"![alt](diagram.png \\\"right\\\")\",\"insert\":\"![{sel}](diagram.png \\\"right\\\")\"},{\"id\":\"img-left\",\"group\":\"Images\",\"label\":\"Split: image left\",\"hint\":\"Mirror of the above. Alternate sides across consecutive slides.\",\"syntax\":\"![alt](diagram.png \\\"left\\\")\",\"insert\":\"![{sel}](diagram.png \\\"left\\\")\"},{\"id\":\"img-bg\",\"group\":\"Images\",\"label\":\"Background image\",\"hint\":\"Covers the whole canvas under the text. Pair it with a low opacity.\",\"syntax\":\"![alt](cover.png \\\"bg opacity:0.25\\\")\",\"insert\":\"![{sel}](cover.png \\\"bg opacity:0.25\\\")\"},{\"id\":\"img-opacity\",\"group\":\"Images\",\"label\":\"Image opacity\",\"hint\":\"Any value from 0.0 to 1.0, combinable with left, right, or bg.\",\"syntax\":\"\\\"right opacity:0.8\\\"\",\"insert\":\"![{sel}](diagram.png \\\"right opacity:0.8\\\")\"},{\"id\":\"embed-youtube\",\"group\":\"Embeds\",\"label\":\"YouTube video\",\"hint\":\"Raw HTML passes straight through. Sized to 16:9 automatically.\",\"syntax\":\"<iframe src=\\\"https://www.youtube.com/embed/ID\\\">\",\"insert\":\"<iframe src=\\\"https://www.youtube.com/embed/{caret}\\\" title=\\\"YouTube\\\" allowfullscreen></iframe>\",\"block\":true},{\"id\":\"embed-video\",\"group\":\"Embeds\",\"label\":\"Local video\",\"hint\":\"Served from the folder you launched in. MP4 and WebM both work.\",\"syntax\":\"<video src=\\\"clip.mp4\\\" controls>\",\"insert\":\"<video src=\\\"{caret}clip.mp4\\\" controls muted loop></video>\",\"block\":true},{\"id\":\"embed-iframe\",\"group\":\"Embeds\",\"label\":\"Any iframe\",\"hint\":\"Dashboards, playgrounds, live docs. Anything that allows framing.\",\"syntax\":\"<iframe src=\\\"https://...\\\">\",\"insert\":\"<iframe src=\\\"https://{caret}\\\" title=\\\"Embed\\\"></iframe>\",\"block\":true},{\"id\":\"act-present\",\"group\":\"Actions\",\"label\":\"Present this deck\",\"hint\":\"Opens the real presentation in a new tab.\",\"syntax\":\"\",\"action\":\"present\",\"keys\":\"Cmd Enter\"},{\"id\":\"act-download\",\"group\":\"Actions\",\"label\":\"Export as Markdown\",\"hint\":\"Downloads a plain .md file. Yours to keep.\",\"syntax\":\"\",\"action\":\"download\",\"keys\":\"Cmd S\"},{\"id\":\"act-pdf\",\"group\":\"Actions\",\"label\":\"Export as PDF\",\"hint\":\"A real PDF file, one 16:9 page per slide, styling intact.\",\"syntax\":\"\",\"action\":\"pdf\",\"keys\":\"Cmd Shift S\"},{\"id\":\"act-html\",\"group\":\"Actions\",\"label\":\"Export as HTML\",\"hint\":\"One standalone page holding the whole deck, ready to host or send.\",\"syntax\":\"\",\"action\":\"html\"},{\"id\":\"act-open\",\"group\":\"Actions\",\"label\":\"Import a Markdown file\",\"hint\":\"Loads a local .md in as a new deck, leaving the others alone.\",\"syntax\":\"\",\"action\":\"open\"},{\"id\":\"act-grid\",\"group\":\"Actions\",\"label\":\"Toggle grid preview\",\"hint\":\"See every slide at once, click one to jump there.\",\"syntax\":\"\",\"action\":\"grid\",\"keys\":\"Cmd G\"},{\"id\":\"act-theme\",\"group\":\"Actions\",\"label\":\"Theme\",\"hint\":\"Nineteen palettes with their own fonts and backdrops. Arrows preview live, enter keeps one.\",\"syntax\":\"\",\"action\":\"theme\",\"keys\":\"Cmd Shift L\"},{\"id\":\"act-guide\",\"group\":\"Actions\",\"label\":\"Open the guide\",\"hint\":\"Every layout, style, and embed this editor supports.\",\"syntax\":\"\",\"action\":\"guide\",\"keys\":\"Cmd /\"},{\"id\":\"act-decks\",\"group\":\"Actions\",\"label\":\"Switch deck\",\"hint\":\"Every deck you have written, kept in this browser.\",\"syntax\":\"\",\"action\":\"decks\",\"keys\":\"Cmd O\"},{\"id\":\"act-new\",\"group\":\"Actions\",\"label\":\"New deck\",\"hint\":\"Starts an empty deck and keeps the current one in the library.\",\"syntax\":\"\",\"action\":\"new\"},{\"id\":\"act-dupe\",\"group\":\"Actions\",\"label\":\"Duplicate this deck\",\"hint\":\"Copies it into the library and switches to the copy.\",\"syntax\":\"\",\"action\":\"duplicate\"},{\"id\":\"act-delete\",\"group\":\"Actions\",\"label\":\"Delete this deck\",\"hint\":\"Removes it from this browser. Download it first to keep it.\",\"syntax\":\"\",\"action\":\"delete\"}]"
+
+var Tips = []string{"Add \"right\" to an image title and the slide splits: text left, image right.","Images load by path from the folder you launched in, so keep the deck next to its diagrams.","Cmd K opens the command palette. Every style, layout, and embed is in there.","Your caret drives the preview. Move it into a slide and the preview follows.","Every deck you write is kept in this browser. Cmd O switches between them.","Cmd G lays out every slide as a grid. Click one to jump the caret there.","A background image reads best around \"bg opacity:0.25\".","Speaker notes live in <!-- notes: ... --> and never reach the slide or the PDF.","Tag the language on a code fence and Highlight.js does the rest.","Everything autosaves to this browser. Nothing is uploaded anywhere.","Drop a .md file onto the editor to load it as a new deck.","Paste a YouTube embed as raw HTML. It is sized to 16:9 for you.","Use *** for a rule inside a slide. --- would start a new one.","<kbd>Cmd</kbd> renders as a key cap, <mark>42ms</mark> as a highlight.","Cmd Enter presents the deck in a new tab, exactly as your audience sees it.","Ctrl Option Left/Right or Ctrl Option Up/Down hops between slides.","Export as PDF from the top bar: a real file, 16:9 pages, no print dialog to wrestle.","Seven bullets is about the ceiling before a slide stops reading from the back row.","Drag the divider to resize. Double-click it to snap back to an even split.","While presenting, press ? for every control the deck has.","L turns on a laser pointer while presenting. D gives you a pen to draw with.","C drops a blank canvas over the slide, for the diagram you did not plan.","B blacks out the screen mid-talk. Press it again to come back.","Write $E = mc^2$ for inline KaTeX, or wrap a display equation in double dollars.","A fenced mermaid block becomes a diagram in the preview, presentation, and PDF.","Templates change composition without touching your Markdown; transitions are independent.","Add {reveal} to a bullet or put it before a block to step through a slide one idea at a time.","Run deckrun lint slides.md before presenting or in CI to catch common authoring mistakes."}
+
+var TipsJSON = "[\"Add \\\"right\\\" to an image title and the slide splits: text left, image right.\",\"Images load by path from the folder you launched in, so keep the deck next to its diagrams.\",\"Cmd K opens the command palette. Every style, layout, and embed is in there.\",\"Your caret drives the preview. Move it into a slide and the preview follows.\",\"Every deck you write is kept in this browser. Cmd O switches between them.\",\"Cmd G lays out every slide as a grid. Click one to jump the caret there.\",\"A background image reads best around \\\"bg opacity:0.25\\\".\",\"Speaker notes live in <!-- notes: ... --> and never reach the slide or the PDF.\",\"Tag the language on a code fence and Highlight.js does the rest.\",\"Everything autosaves to this browser. Nothing is uploaded anywhere.\",\"Drop a .md file onto the editor to load it as a new deck.\",\"Paste a YouTube embed as raw HTML. It is sized to 16:9 for you.\",\"Use *** for a rule inside a slide. --- would start a new one.\",\"<kbd>Cmd</kbd> renders as a key cap, <mark>42ms</mark> as a highlight.\",\"Cmd Enter presents the deck in a new tab, exactly as your audience sees it.\",\"Ctrl Option Left/Right or Ctrl Option Up/Down hops between slides.\",\"Export as PDF from the top bar: a real file, 16:9 pages, no print dialog to wrestle.\",\"Seven bullets is about the ceiling before a slide stops reading from the back row.\",\"Drag the divider to resize. Double-click it to snap back to an even split.\",\"While presenting, press ? for every control the deck has.\",\"L turns on a laser pointer while presenting. D gives you a pen to draw with.\",\"C drops a blank canvas over the slide, for the diagram you did not plan.\",\"B blacks out the screen mid-talk. Press it again to come back.\",\"Write $E = mc^2$ for inline KaTeX, or wrap a display equation in double dollars.\",\"A fenced mermaid block becomes a diagram in the preview, presentation, and PDF.\",\"Templates change composition without touching your Markdown; transitions are independent.\",\"Add {reveal} to a bullet or put it before a block to step through a slide one idea at a time.\",\"Run deckrun lint slides.md before presenting or in CI to catch common authoring mistakes.\"]"
+
+const WelcomeDeck = `# deckrun
+
+### Write slides in Markdown, present in the browser
+
+Everything on the left is a plain ` + "`" + `.md` + "`" + ` file. The right side is the real deck.
+
+<!-- notes: Notes live here. They never reach the slide or the PDF, but you can see them while you write. -->
+
+---
+
+## Type on the left, watch the right
+
+- The preview follows your caret, so it always shows the slide you are editing
+- Press <kbd>Cmd</kbd> <kbd>K</kbd> for every style, layout, and embed
+- Press <kbd>Cmd</kbd> <kbd>G</kbd> to see the whole deck as a grid
+- Press <kbd>Cmd</kbd> <kbd>Enter</kbd> to present for real
+
+Three dashes on their own line start a new slide.
+
+---
+
+## Code gets highlighted
+
+Tag the language and the grammar comes for free:
+
+` + "`" + `` + "`" + `` + "`" + `go
+func (w *WAL) Append(e Entry) error {
+    if _, err := w.file.Write(e.Encode()); err != nil {
+        return fmt.Errorf("append: %w", err)
+    }
+    return w.file.Sync()
+}
+` + "`" + `` + "`" + `` + "`" + `
+
+> the log is the source of truth, the data file is a materialized view of it
+
+---
+
+## Math and diagrams stay in Markdown
+
+The same source renders live and survives PDF export:
+
+$$
+T(n) = T(n/2) + O(n) = O(n)
+$$
+
+` + "`" + `` + "`" + `` + "`" + `mermaid
+graph LR
+  Markdown --> Preview --> Present --> PDF
+` + "`" + `` + "`" + `` + "`" + `
+
+---
+
+## Reveal one idea at a time
+
+- This point is visible when the slide opens
+- This one appears on the next advance {reveal}
+- Then this one {reveal}
+
+{reveal}
+> A marker on its own line reveals the whole block after it.
+
+---
+
+## Tables, lists, and accents
+
+| Configuration  | Throughput | p99 latency     |
+| -------------- | ---------- | --------------- |
+| Single node    | 12,400/s   | <mark>18.2ms</mark> |
+| 3-node cluster | 35,100/s   | 6.4ms           |
+
+- **Bold** lands peach, *italic* recedes, ` + "`" + `inline code` + "`" + ` gets a green chip
+- Nesting works too
+  - two spaces per level
+
+---
+
+## Images split the slide
+
+An image path resolves against the folder you launched in. Add a directive to the title and it changes the layout:
+
+` + "`" + `` + "`" + `` + "`" + `markdown
+![Diagram](diagram.png "right")
+![Diagram](diagram.png "left opacity:0.8")
+![Cover](cover.png "bg opacity:0.25")
+` + "`" + `` + "`" + `` + "`" + `
+
+<!-- notes: Launch deckrun in the folder holding your diagrams and the paths just work. -->
+
+---
+
+# Your turn
+
+- Start typing over this deck, or press Cmd O and make a new one
+- <kbd>Cmd</kbd> <kbd>S</kbd> downloads the Markdown
+- <kbd>Cmd</kbd> <kbd>/</kbd> opens the full guide
+`
