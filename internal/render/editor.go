@@ -107,3 +107,4 @@ func GenerateEditorHTML(
 		EditorScript,
 	)
 }
+

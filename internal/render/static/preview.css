@@ -1,0 +1,76 @@
+/* ── Preview overrides ────────────────────────────────────────────────── */
+html, body { overflow: hidden; }
+body.is-grid, body.is-grid #presentation { overflow-y: auto; height: auto; min-height: 100%; }
+
+.slide {
+  transition: none !important;
+  transform: none !important;
+}
+
+/* The deck staggers each block in as a slide opens. Here the slide is rebuilt
+   on every keystroke, so the same animation would flicker while typing. */
+.slide.is-active .slide__content > * { animation: none !important; }
+
+#presentation { background: transparent; }
+
+/* Grid of every slide, laid out at the same virtual width as a single slide. */
+body.is-grid #presentation {
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: 34px;
+  padding: 34px;
+  width: 100%;
+}
+
+.pv-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--surface0);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--base);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.pv-thumb:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.pv-thumb.is-current { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2); }
+
+.pv-thumb__inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1600px;
+  height: 900px;
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.pv-thumb__num {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--overlay1);
+  background: var(--crust-overlay);
+  border-radius: 5px;
+  padding: 2px 8px;
+}
+
+/* Empty state */
+#pv-empty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 26px;
+  color: var(--overlay0);
+  letter-spacing: 0.04em;
+}
+
+body.is-empty #pv-empty { display: flex; }

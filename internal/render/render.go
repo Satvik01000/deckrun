@@ -443,3 +443,4 @@ func GenerateDocHTML(docURL string, title string, autoFullscreen bool, themeInpu
 		DocScript,
 	)
 }
+

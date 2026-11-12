@@ -165,3 +165,4 @@ func ServeEvents(w *Watcher, res http.ResponseWriter, req *http.Request) {
 		}
 	}
 }
+

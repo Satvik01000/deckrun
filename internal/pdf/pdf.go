@@ -211,3 +211,4 @@ func RenderPDFSerial(urlStr string, browser string) ([]byte, error) {
 	defer pdfMu.Unlock()
 	return RenderPDF(urlStr, browser)
 }
+

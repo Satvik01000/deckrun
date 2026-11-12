@@ -136,3 +136,4 @@ func TestCatppuccinAndOneDarkPro(t *testing.T) {
 		t.Errorf("onedarkpro HLJS mismatch")
 	}
 }
+

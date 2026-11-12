@@ -102,6 +102,7 @@ func GeneratePreviewHTML(
 		PreviewCSS,
 		FragmentRuntime,
 		RichContentRuntime,
-		PreviewScript,
+		PreviewScript(),
 	)
 }
+
