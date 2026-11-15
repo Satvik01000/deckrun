@@ -137,3 +137,55 @@ func TestCatppuccinAndOneDarkPro(t *testing.T) {
 	}
 }
 
+func TestMatteThemes(t *testing.T) {
+	cases := []struct {
+		id     string
+		mood   theme.Mood
+		base   string
+		text   string
+		accent string
+		aliases []string
+	}{
+		{
+			id:      "matte-black",
+			mood:    theme.MoodDark,
+			base:    "#161618",
+			text:    "#f0f0f3",
+			accent:  "#f0f0f3",
+			aliases: []string{"matteblack", "matte black", "black"},
+		},
+		{
+			id:      "matte-white",
+			mood:    theme.MoodLight,
+			base:    "#f7f7f5",
+			text:    "#141413",
+			accent:  "#141413",
+			aliases: []string{"mattewhite", "matte white", "white"},
+		},
+	}
+
+	for _, tc := range cases {
+		th, ok := theme.Themes[tc.id]
+		if !ok {
+			t.Fatalf("theme %s not found", tc.id)
+		}
+		if th.Mood != tc.mood {
+			t.Errorf("%s mood mismatch: got %s, want %s", tc.id, th.Mood, tc.mood)
+		}
+		if th.Neutrals.Base != tc.base {
+			t.Errorf("%s base mismatch: got %s, want %s", tc.id, th.Neutrals.Base, tc.base)
+		}
+		if th.Neutrals.Text != tc.text {
+			t.Errorf("%s text mismatch: got %s, want %s", tc.id, th.Neutrals.Text, tc.text)
+		}
+		if got := th.RoleColor("accent"); got != tc.accent {
+			t.Errorf("%s RoleColor(accent) mismatch: got %s, want %s", tc.id, got, tc.accent)
+		}
+		for _, alias := range tc.aliases {
+			if res := theme.ResolveThemeName(alias); res != tc.id {
+				t.Errorf("alias %q resolved to %s, want %s", alias, res, tc.id)
+			}
+		}
+	}
+}
+

@@ -25,6 +25,44 @@ func escAttr(str string) string {
 	return html.EscapeString(str)
 }
 
+func renderImagePanel(imgs []*parser.PositionedImage, single *parser.PositionedImage) string {
+	if len(imgs) == 0 && single != nil {
+		imgs = []*parser.PositionedImage{single}
+	}
+	if len(imgs) == 0 {
+		return ""
+	}
+	multiClass := ""
+	panelStyle := ""
+	if len(imgs) > 1 {
+		multiClass = " slide__image-panel--multi"
+		panelStyle = fmt.Sprintf(` style="--panel-count:%d;"`, len(imgs))
+	}
+	var imgTags strings.Builder
+	for _, img := range imgs {
+		if img == nil {
+			continue
+		}
+		var styles []string
+		if img.Opacity > 0 && img.Opacity < 1.0 {
+			styles = append(styles, fmt.Sprintf("opacity:%v", img.Opacity))
+		}
+		if img.Size != "" {
+			styles = append(styles, strings.TrimSuffix(img.Size, ";"))
+		}
+		styleAttr := ""
+		if len(styles) > 0 {
+			styleAttr = fmt.Sprintf(` style="%s;"`, escAttr(strings.Join(styles, ";")))
+		}
+		imgTag := fmt.Sprintf(`<img src="%s" alt="%s"%s />`, escAttr(img.Src), escAttr(img.Alt), styleAttr)
+		if img.Caption != "" {
+			imgTag = fmt.Sprintf(`<figure class="slide__figure">%s<figcaption>%s</figcaption></figure>`, imgTag, escAttr(img.Caption))
+		}
+		imgTags.WriteString(imgTag)
+	}
+	return fmt.Sprintf(`<div class="slide__image-panel%s"%s>%s</div>`, multiClass, panelStyle, imgTags.String())
+}
+
 func RenderSlide(slide parser.Slide, index int) string {
 	bgStyle := ""
 	if slide.BGImage != nil {
@@ -37,22 +75,39 @@ func RenderSlide(slide parser.Slide, index int) string {
 	}
 
 	var innerHTML string
-	if slide.RightImage != nil {
+	hasRight := len(slide.RightImages) > 0 || slide.RightImage != nil
+	hasLeft := len(slide.LeftImages) > 0 || slide.LeftImage != nil
+	if hasLeft && hasRight {
+		leftPanel := renderImagePanel(slide.LeftImages, slide.LeftImage)
+		rightPanel := renderImagePanel(slide.RightImages, slide.RightImage)
+		if strings.TrimSpace(slide.HTML) == "" {
+			innerHTML = fmt.Sprintf(`
+      <div class="slide__split">
+        %s
+        %s
+      </div>`, leftPanel, rightPanel)
+		} else {
+			innerHTML = fmt.Sprintf(`
+      <div class="slide__split">
+        %s
+        <div class="slide__content">%s</div>
+        %s
+      </div>`, leftPanel, slide.HTML, rightPanel)
+		}
+	} else if hasRight {
+		rightPanel := renderImagePanel(slide.RightImages, slide.RightImage)
 		innerHTML = fmt.Sprintf(`
       <div class="slide__split">
         <div class="slide__content">%s</div>
-        <div class="slide__image-panel" style="opacity:%v">
-          <img src="%s" alt="%s" />
-        </div>
-      </div>`, slide.HTML, slide.RightImage.Opacity, escAttr(slide.RightImage.Src), escAttr(slide.RightImage.Alt))
-	} else if slide.LeftImage != nil {
+        %s
+      </div>`, slide.HTML, rightPanel)
+	} else if hasLeft {
+		leftPanel := renderImagePanel(slide.LeftImages, slide.LeftImage)
 		innerHTML = fmt.Sprintf(`
       <div class="slide__split slide__split--left-image">
-        <div class="slide__image-panel" style="opacity:%v">
-          <img src="%s" alt="%s" />
-        </div>
+        %s
         <div class="slide__content">%s</div>
-      </div>`, slide.LeftImage.Opacity, escAttr(slide.LeftImage.Src), escAttr(slide.LeftImage.Alt), slide.HTML)
+      </div>`, leftPanel, slide.HTML)
 	} else {
 		innerHTML = fmt.Sprintf(`<div class="slide__content">%s</div>`, slide.HTML)
 	}

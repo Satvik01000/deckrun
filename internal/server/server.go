@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"net"
 	"net/http"
@@ -160,10 +163,16 @@ func getMime(path string) string {
 		return "image/x-icon"
 	case ".avif":
 		return "image/avif"
+	case ".bmp":
+		return "image/bmp"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":
 		return "video/webm"
+	case ".mov":
+		return "video/quicktime"
+	case ".ogg":
+		return "video/ogg"
 	case ".woff":
 		return "font/woff"
 	case ".woff2":
@@ -177,6 +186,167 @@ func getMime(path string) string {
 		}
 		return "application/octet-stream"
 	}
+}
+
+var allowedMediaExts = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+	".svg":  true,
+	".webp": true,
+	".avif": true,
+	".ico":  true,
+	".bmp":  true,
+	".mp4":  true,
+	".webm": true,
+	".mov":  true,
+	".ogg":  true,
+}
+
+var mediaExtCandidates = []string{
+	".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif", ".bmp", ".mp4", ".webm", ".mov",
+}
+
+func normMediaName(s string) string {
+	r := strings.NewReplacer(
+		"\u202f", " ",
+		"\u00a0", " ",
+		"\u2009", " ",
+		"\u2007", " ",
+	)
+	return strings.ToLower(r.Replace(s))
+}
+
+func isExplicitNonMediaExt(ext string) bool {
+	if ext == "" || strings.Contains(ext, " ") || len(ext) < 2 {
+		return false
+	}
+	first := ext[1]
+	return !(first >= '0' && first <= '9')
+}
+
+// ResolveLocalMediaPath resolves a local media path (supporting @local:, file://,
+// ~/, relative paths, and absolute paths), probes common media extensions when omitted,
+// handles macOS Unicode space normalization, and restricts access to allowed media extensions.
+func ResolveLocalMediaPath(baseDir, rawPath string) (resolved string, allowed bool, err error) {
+	p := strings.TrimSpace(rawPath)
+	lower := strings.ToLower(p)
+	switch {
+	case strings.HasPrefix(lower, "@local:"):
+		p = strings.TrimSpace(p[len("@local:"):])
+	case strings.HasPrefix(lower, "local://"):
+		p = strings.TrimSpace(p[len("local://"):])
+	case strings.HasPrefix(lower, "file://"):
+		p = strings.TrimSpace(p[len("file://"):])
+	}
+	if p == "" {
+		return "", false, nil
+	}
+
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return "", false, nil
+		}
+		if p == "~" {
+			p = home
+		} else {
+			p = filepath.Join(home, p[2:])
+		}
+	} else if !filepath.IsAbs(p) {
+		p = filepath.Join(baseDir, p)
+	}
+
+	p = filepath.Clean(p)
+	if abs, aerr := filepath.Abs(p); aerr == nil {
+		p = abs
+	}
+
+	ext := strings.ToLower(filepath.Ext(p))
+	dir := filepath.Dir(p)
+	wantBase := normMediaName(filepath.Base(p))
+
+	// Case A: explicit allowed media extension
+	if allowedMediaExts[ext] {
+		if info, statErr := os.Stat(p); statErr == nil && !info.IsDir() {
+			return p, true, nil
+		}
+		if entries, rerr := os.ReadDir(dir); rerr == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				if normMediaName(entry.Name()) == wantBase {
+					return filepath.Join(dir, entry.Name()), true, nil
+				}
+			}
+		}
+		return p, true, os.ErrNotExist
+	}
+
+	// Case B: missing or unrecognized extension (e.g. Finder-hidden .png or timestamp dots like ".58 AM")
+	for _, candExt := range mediaExtCandidates {
+		cand := p + candExt
+		if info, statErr := os.Stat(cand); statErr == nil && !info.IsDir() {
+			return cand, true, nil
+		}
+	}
+
+	if entries, rerr := os.ReadDir(dir); rerr == nil {
+		byNorm := make(map[string]string, len(entries))
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			entryExt := strings.ToLower(filepath.Ext(entry.Name()))
+			if !allowedMediaExts[entryExt] {
+				continue
+			}
+			normEntry := normMediaName(entry.Name())
+			if _, exists := byNorm[normEntry]; !exists {
+				byNorm[normEntry] = entry.Name()
+			}
+		}
+		if name, ok := byNorm[wantBase]; ok {
+			return filepath.Join(dir, name), true, nil
+		}
+		for _, candExt := range mediaExtCandidates {
+			if name, ok := byNorm[wantBase+candExt]; ok {
+				return filepath.Join(dir, name), true, nil
+			}
+		}
+	}
+
+	if info, statErr := os.Stat(p); statErr == nil && !info.IsDir() {
+		return "", false, nil
+	}
+	if isExplicitNonMediaExt(ext) {
+		return "", false, nil
+	}
+	return p, true, os.ErrNotExist
+}
+
+func safeAssetName(rawName string) (string, string, bool) {
+	base := filepath.Base(strings.TrimSpace(rawName))
+	if base == "" || base == "." || base == "/" {
+		base = "image.png"
+	}
+	ext := strings.ToLower(filepath.Ext(base))
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	if ext == "" {
+		ext = ".png"
+	}
+	if !allowedMediaExts[ext] {
+		return "", "", false
+	}
+	cleanStem := strings.ToLower(strings.TrimSpace(stem))
+	cleanStem = safeFilenameRegex.ReplaceAllString(cleanStem, "-")
+	cleanStem = strings.Trim(cleanStem, "-.")
+	if cleanStem == "" {
+		cleanStem = "image"
+	}
+	return cleanStem, ext, true
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -236,6 +406,136 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", getMime(assetPath))
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		_, _ = w.Write(data)
+		return
+	}
+
+	// 2b. Local Media Assets (GET /__local?path=..., GET /__assets, POST /__upload-asset)
+	if pathname == "/__local" && r.Method == http.MethodGet {
+		qPath := r.URL.Query().Get("path")
+		resolved, allowed, resolveErr := ResolveLocalMediaPath(s.BaseDir, qPath)
+		if !allowed {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if resolveErr != nil {
+			http.NotFound(w, r)
+			return
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", getMime(resolved))
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(data)
+		return
+	}
+
+	if pathname == "/__assets" && r.Method == http.MethodGet {
+		files := []string{}
+		_ = filepath.WalkDir(s.BaseDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			rel, relErr := filepath.Rel(s.BaseDir, path)
+			if relErr != nil || rel == "." {
+				return nil
+			}
+			slashRel := filepath.ToSlash(rel)
+			parts := strings.Split(slashRel, "/")
+			if d.IsDir() {
+				name := d.Name()
+				if strings.HasPrefix(name, ".") || name == "node_modules" || name == "bin" || len(parts) > 2 {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if len(parts) > 3 {
+				return nil
+			}
+			ext := strings.ToLower(filepath.Ext(d.Name()))
+			if allowedMediaExts[ext] {
+				files = append(files, slashRel)
+				if len(files) >= 60 {
+					return fs.SkipAll
+				}
+			}
+			return nil
+		})
+		sendJSON(w, map[string]any{
+			"baseDir": s.BaseDir,
+			"files":   files,
+		})
+		return
+	}
+
+	if pathname == "/__upload-asset" && r.Method == http.MethodPost {
+		body, err := readBody(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
+		var req struct {
+			Name string `json:"name"`
+			Data string `json:"data"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		rawData := strings.TrimSpace(req.Data)
+		if strings.HasPrefix(rawData, "data:") {
+			if comma := strings.Index(rawData, ","); comma != -1 {
+				rawData = rawData[comma+1:]
+			}
+		}
+		decoded, err := base64.StdEncoding.DecodeString(rawData)
+		if err != nil {
+			decoded, err = base64.RawStdEncoding.DecodeString(rawData)
+			if err != nil {
+				http.Error(w, "invalid base64 image data", http.StatusBadRequest)
+				return
+			}
+		}
+
+		stem, ext, ok := safeAssetName(req.Name)
+		if !ok {
+			http.Error(w, "unsupported media file type", http.StatusBadRequest)
+			return
+		}
+
+		assetsDir := filepath.Join(s.BaseDir, "assets")
+		if err := os.MkdirAll(assetsDir, 0755); err != nil {
+			http.Error(w, "cannot create assets directory", http.StatusInternalServerError)
+			return
+		}
+
+		finalName := stem + ext
+		for idx := 2; idx < 1000; idx++ {
+			candPath := filepath.Join(assetsDir, finalName)
+			existing, statErr := os.ReadFile(candPath)
+			if statErr != nil {
+				break
+			}
+			if bytes.Equal(existing, decoded) {
+				break
+			}
+			finalName = fmt.Sprintf("%s-%d%s", stem, idx, ext)
+		}
+
+		destPath := filepath.Join(assetsDir, finalName)
+		if err := os.WriteFile(destPath, decoded, 0644); err != nil {
+			http.Error(w, "failed to save asset", http.StatusInternalServerError)
+			return
+		}
+
+		relPath := "assets/" + finalName
+		sendJSON(w, map[string]string{
+			"path": relPath,
+			"url":  "/__local?path=" + url.QueryEscape(relPath),
+		})
 		return
 	}
 
@@ -429,6 +729,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			sendJSON(w, map[string]string{"error": "empty document"})
 			return
 		}
+		raw = parser.RewriteLocalAssetURLsInHTML(raw)
 
 		th := theme.ResolveThemeName(req.Theme)
 		fallbackTitle := strings.TrimSpace(req.Title)
@@ -565,6 +866,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			sendJSON(w, map[string]string{"error": "empty document"})
 			return
 		}
+		raw = parser.RewriteLocalAssetURLsInHTML(raw)
 
 		browser := pdf.FindBrowser()
 		if browser == "" {

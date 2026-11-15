@@ -4,7 +4,7 @@ Write slides in Markdown or bring a self-contained HTML document, run a local se
 
 - **Two formats** - Markdown decks with slide-by-slide presentation, or self-contained HTML documents with continuous scrolling
 - **Live editor** - edit alongside a live preview, with autosave and a library of all your decks and docs
-- **19 themes** - unique palettes, typography, animated backdrops, Catppuccin flavors (Latte, Frappé, Macchiato, Mocha), Atom One Dark Pro, and customizable heading and body fonts
+- **21 themes** - unique palettes, typography, animated backdrops, Catppuccin flavors (Latte, Frappé, Macchiato, Mocha), Atom One Dark Pro, Matte Black/White, and customizable heading and body fonts
 - **Templates and motion** - four composition templates and five transitions, switchable without touching the Markdown
 - **Technical content** - KaTeX equations and Mermaid diagrams (with isolated typography & fence-aware parsing) in preview, presentation, HTML, and PDF
 - **Incremental reveals** - step through bullets, prose, equations, code, or diagrams without duplicating slides
@@ -130,7 +130,7 @@ The server binds to `127.0.0.1` only, so the deck is never exposed on the networ
 | `--no-open`           | `false` | Start the HTTP server without opening the browser      |
 | `--no-watch`          | `false` | Do not watch the opened file for changes on disk       |
 | `--fullscreen`        | `false` | Prompt to enter fullscreen on the first key or click   |
-| `--theme <name>`      | `nord`     | Any of the fourteen themes, by id                   |
+| `--theme <name>`      | `nord`  | Any of the twenty-one themes, by id                    |
 | `--head-font <name>`  |         | Override the theme's heading and title face             |
 | `--body-font <name>`  |         | Override the theme's body face                          |
 | `--template <name>`   | `classic` | Composition: `classic`, `minimal`, `editorial`, or `spotlight` |
@@ -363,8 +363,8 @@ Empty slides are dropped, so trailing separators are harmless. A `---` on the ve
 
 Two more things `---` does that catch people out:
 
-- It breaks a slide even inside a fenced code block. A `---` line in your code sample will split the deck there, so use a different separator in sample output.
 - It is the only slide break. For a horizontal rule inside a slide, write `***` or `___`.
+- Slides are split strictly outside fenced code blocks and Mermaid diagrams, so a `---` inside a code sample or diagram will not break your slide.
 
 ### Page title
 
@@ -372,7 +372,7 @@ The rendered page title comes from the first heading of the first slide, with an
 
 ### Markdown support
 
-Slides are rendered with [marked](https://github.com/markedjs/marked), so standard Markdown works: headings, paragraphs, ordered and unordered lists with nesting, tables, blockquotes, horizontal rules, links, inline code, bold, and italic.
+Slides are rendered with [Goldmark](https://github.com/yuin/goldmark) with GitHub Flavored Markdown (GFM) extensions, so standard Markdown works: headings, paragraphs, ordered and unordered lists with nesting, tables, blockquotes, horizontal rules, links, inline code, bold, and italic.
 
 Each element is styled for projection rather than reading:
 
@@ -562,7 +562,7 @@ Images with no directive stay inline, centered in the document flow and capped a
 
 ## Themes
 
-Nineteen themes, twelve dark and seven light. A theme is not just a palette: each
+Twenty-one themes, thirteen dark and eight light. A theme is not just a palette: each
 one brings its own display, body, and monospace faces, its own Highlight.js
 grammar colors, and its own animated geometry behind the slides.
 
@@ -580,6 +580,7 @@ grammar colors, and its own animated geometry behind the slides.
 | `catppuccin-macchiato`   | dark  | Official Catppuccin Macchiato. Balanced mauve on deep indigo         |
 | `catppuccin-mocha`       | dark  | Official Catppuccin Mocha. Full-strength mauve on the darkest base   |
 | `neon`                   | dark  | Electric cyan and magenta on true black, raked by light beams        |
+| `matte-black`            | dark  | Velvet carbon and chalk. Flat, glare-free monochrome                 |
 | `daylight`               | light | Catppuccin Latte, contrast-tuned for a projector. Dot matrix         |
 | `arctic`                 | light | Nord inverted. Frost blue on cool paper, with contour waves          |
 | `solarized`              | light | The classic low-glare cream, paired with Lora for long prose         |
@@ -587,6 +588,7 @@ grammar colors, and its own animated geometry behind the slides.
 | `rosequartz`             | light | Rosé Pine Dawn. Blush and iris on linen, with soft orbs              |
 | `swiss`                  | light | Black on white, one red. Heavy grotesk, tight tracking, hard grid    |
 | `catppuccin-latte`       | light | Official Catppuccin Latte. Warm mauve on soft cream                  |
+| `matte-white`            | light | Graphite ink on uncoated alabaster. Quiet, glare-free monochrome     |
 
 ```bash
 deckrun slides.md --theme paper
@@ -690,7 +692,7 @@ editor preview, where the slide is rebuilt on every keystroke, and in the PDF.
 
 ### Writing your own theme
 
-Themes live in `src/themes.ts`. Append one entry to `SPECS` and it appears
+Themes live in `internal/theme/theme.go`. Append one entry to `themeSpecs` and it appears
 everywhere at once: the `--theme` flag, `--list-themes`, the editor's picker,
 the live preview, the HTML export, and the PDF. Nothing else needs touching.
 
@@ -713,17 +715,17 @@ An entry is four things:
 
 Plus `decor` for the backdrop and `hljs` for the code stylesheet.
 
-```ts
-seafoam: {
-  label: "seafoam",
-  mood: "dark",
-  blurb: "Pale green on graphite, with a dot matrix.",
-  neutrals: { crust: "#0f1413", mantle: "#141a19", /* … eleven in all */ },
-  accents:  { teal: "#7fd6c1", blue: "#78b7d0", /* … eleven in all */ },
-  roles: { accent: "teal", accent2: "blue", accent3: "green" },
-  type: { display: "sora", body: "inter", mono: "jetbrains", weight: 700 },
-  decor: "dots",
-  hljs: `${HL}atom-one-dark.min.css`,
+```go
+"seafoam": {
+    Label: "seafoam",
+    Mood:  "dark",
+    Blurb: "Pale green on graphite, with a dot matrix.",
+    Neutrals: Neutrals{Crust: "#0f1413", Mantle: "#141a19", /* … eleven in all */},
+    Accents:  Accents{Teal: "#7fd6c1", Blue: "#78b7d0", /* … eleven in all */},
+    Roles:    Roles{Accent: "teal", Accent2: "blue", Accent3: "green"},
+    Type:     ThemeType{Display: "sora", Body: "inter", Mono: "jetbrains", Weight: 700},
+    Decor:    "dots",
+    HLJS:     "atom-one-dark.min.css",
 },
 ```
 
@@ -806,7 +808,7 @@ Press `C` and the same canvas paints itself opaque over the slide: a blank board
 
 Select text — in the editor's preview, in a presented deck, or in a presented HTML doc — and a small bar appears with `highlight` and `highlight + comment`. Click a highlight to edit its comment or remove it; one that carries a comment gets a dot after it and shows the comment on hover.
 
-- **The pen is not a theme colour.** A highlight is marker yellow with its own dark ink on all fourteen palettes, and a commented one is marker cyan. A tint of the accent would read as part of the design; the point of a highlight is that you can find it across a room, on a dark theme or a light one. Syntax colouring gives way to the ink inside a mark, so highlighted code stays readable.
+- **The pen is not a theme colour.** A highlight is marker yellow with its own dark ink on all twenty-one palettes, and a commented one is marker cyan. A tint of the accent would read as part of the design; the point of a highlight is that you can find it across a room, on a dark theme or a light one. Syntax colouring gives way to the ink inside a mark, so highlighted code stays readable.
 - **They are session state, nothing more.** Highlights live in the browser session. They survive a reload and follow you into the tab `present` opens, and the moment that tab or the browser closes they are gone. Nothing reaches disk, the server, or `localStorage`, and the first time you make one the editor says so.
 - **The editor and the projector share them.** Highlight while writing and the marks are already on the slides when you present, on the right slide and with their comments intact. Both tabs stay in step for as long as they are open.
 - **They are anchored to the text, not to a position.** Edit the paragraph above a highlight and it stays put. Delete the sentence it was on and it quietly drops out rather than landing somewhere wrong.
@@ -1026,7 +1028,7 @@ The Go source architecture:
 - `cmd/deckrun/main.go`: CLI entrypoint, argument and flag parsing, subcommands, and browser launcher
 - `internal/assets/`: Embedded vendor assets (KaTeX CSS/JS/fonts, Mermaid JS) via `embed.FS`
 - `internal/parser/`: Fence-aware slide splitting, markdown tokens, KaTeX/Mermaid detection, and Goldmark GFM parsing
-- `internal/theme/`: 19 palettes (including Catppuccin and One Dark Pro), 20 Google fonts, 10 animated decors, templates, and transitions
+- `internal/theme/`: 21 palettes (including Catppuccin, One Dark Pro, Matte Black, and Matte White), 20 Google fonts, 10 animated decors, templates, and transitions
 - `internal/render/`: HTML generation for editor, preview, presenter, documents, fragment reveals, and typography-isolated Mermaid styles
 - `internal/server/`: HTTP server, SSE live-reloader, file watcher with fsnotify, and static asset handling
 - `internal/pdf/`: Headless Chromium PDF exporter with virtual time budgets

@@ -239,3 +239,112 @@ func TestNoUninterpolatedTemplateLiteralsOrCorruptedRegexes(t *testing.T) {
 	}
 }
 
+func TestSpanColorWrapperControlsInEditor(t *testing.T) {
+	editor := render.GenerateEditorHTML("nord", render.FontOverrides{}, "classic", "slide", nil)
+	for _, want := range []string{
+		`id="btn-span"`,
+		`id="span-menu"`,
+		`id="span-swatches"`,
+		`id="span-style-input"`,
+		`"id":"span-color"`,
+		`wrapSelectionWithSpan`,
+		`Cmd Shift C`,
+		`id="img-sizes"`,
+		`data-img-size="55%"`,
+		`img-size`,
+	} {
+		if !strings.Contains(editor, want) {
+			t.Errorf("editor HTML missing %q", want)
+		}
+	}
+}
+
+func TestMultiImagePanelRendering(t *testing.T) {
+	slides := parser.ParseSlides(`# Slide 1
+@img(~/College/Notes Images/Scaling example | right | 70%)
+@img(~/College/Notes Images/12 | right | h:220px)
+`)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	rendered := render.RenderSlide(slides[0], 0)
+	for _, want := range []string{
+		`slide__image-panel--multi`,
+		`--panel-count:2;`,
+		`Scaling+example`,
+		`%2F12"`,
+		`width:70%`,
+		`height:220px`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered multi-image slide missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestDoubleClickSyncInEditorAndPreview(t *testing.T) {
+	editor := render.GenerateEditorHTML("nord", render.FontOverrides{}, "classic", "slide", nil)
+	for _, want := range []string{
+		`sync-source`,
+		`stripMdWithMap`,
+		`findSourceRangeInSlide`,
+		`t-sync-line`,
+		`flashEditorLines`,
+		`syncPreviewFromSourceDblClick`,
+		`syncHtmlToSourceFromPreview`,
+	} {
+		if !strings.Contains(editor, want) {
+			t.Errorf("editor HTML missing %q", want)
+		}
+	}
+
+	preview := render.GeneratePreviewHTML("nord", render.FontOverrides{}, "classic", "slide")
+	for _, want := range []string{
+		`sync-source`,
+		`flash-preview`,
+		`dr-sync-flash`,
+		`flashPreviewElement`,
+		`dblclick`,
+	} {
+		if !strings.Contains(preview, want) {
+			t.Errorf("preview HTML missing %q", want)
+		}
+	}
+}
+
+func TestSplitViewResponsiveContainmentInEditor(t *testing.T) {
+	editor := render.GenerateEditorHTML("nord", render.FontOverrides{}, "classic", "slide", nil)
+	for _, want := range []string{
+		`#edit-wrap { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }`,
+		`isStackedLayout`,
+		`cursor: row-resize`,
+		`is-resizing-panes`,
+	} {
+		if !strings.Contains(editor, want) {
+			t.Errorf("editor HTML missing split-view responsive rule %q", want)
+		}
+	}
+}
+
+func TestLeftRightCaptionedImagePanels(t *testing.T) {
+	slides := parser.ParseSlides(`@img(assets/image-3.png | h:56vh | left | caption:SDLC)
+@img(assets/image-4.png | h:56vh | right | caption:MLLC)
+`)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	rendered := render.RenderSlide(slides[0], 0)
+	for _, want := range []string{
+		`<figure class="slide__figure">`,
+		`<figcaption>SDLC</figcaption>`,
+		`<figcaption>MLLC</figcaption>`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered slide missing %q:\n%s", want, rendered)
+		}
+	}
+	if strings.Contains(rendered, `<div class="slide__content"></div>`) {
+		t.Errorf("empty slide__content spacer should be omitted when left+right panels have no body text:\n%s", rendered)
+	}
+}
+

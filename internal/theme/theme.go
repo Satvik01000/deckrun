@@ -80,7 +80,7 @@ type Theme struct {
 
 const DefaultTheme = "nord"
 
-var ThemeIDs = []string{"midnight", "tokyo", "nord", "dracula", "gruvbox", "rosepine", "forest", "onedarkpro", "catppuccin-frappe", "catppuccin-macchiato", "catppuccin-mocha", "neon", "daylight", "arctic", "solarized", "paper", "rosequartz", "swiss", "catppuccin-latte"}
+var ThemeIDs = []string{"midnight", "tokyo", "nord", "dracula", "gruvbox", "rosepine", "forest", "onedarkpro", "catppuccin-frappe", "catppuccin-macchiato", "catppuccin-mocha", "neon", "matte-black", "daylight", "arctic", "solarized", "paper", "rosequartz", "swiss", "catppuccin-latte", "matte-white"}
 
 var FontIDs = []string{"inter", "spaceGrotesk", "sora", "manrope", "figtree", "outfit", "archivo", "syne", "bricolage", "workSans", "plexSans", "fraunces", "playfair", "newsreader", "lora", "plexMono", "jetbrains", "firaCode", "spaceMono", "sourceCodePro"}
 
@@ -92,6 +92,12 @@ var Aliases = map[string]string{
 	"tokyo-night": "tokyo",
 	"rose-pine":   "rosepine",
 	"rose-quartz": "rosequartz",
+	"matteblack":  "matte-black",
+	"matte black": "matte-black",
+	"black":       "matte-black",
+	"mattewhite":  "matte-white",
+	"matte white": "matte-white",
+	"white":       "matte-white",
 }
 
 var Fonts = map[string]FontFace{
@@ -1029,6 +1035,102 @@ var Themes = map[string]Theme{
 		},
 		Decor: "aurora",
 		HLJS: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css",
+	},
+	"matte-black": {
+		ID: "matte-black",
+		Label: "matte black",
+		Mood: Mood("dark"),
+		Blurb: "Velvet carbon and chalk. Flat, glare-free monochrome with silver-grey rules.",
+		Neutrals: Neutrals{
+			Crust: "#0b0b0c",
+			Mantle: "#111113",
+			Base: "#161618",
+			Surface0: "#222226",
+			Surface1: "#2e2e33",
+			Surface2: "#3d3d44",
+			Overlay0: "#5e5e68",
+			Overlay1: "#7c7c88",
+			Subtext0: "#a2a2ad",
+			Subtext1: "#c8c8d0",
+			Text: "#f0f0f3",
+		},
+		Accents: Accents{
+			Lavender: "#c4c4d4",
+			Blue: "#8fa8c8",
+			Sapphire: "#7fa6b8",
+			Sky: "#9ab8c8",
+			Teal: "#82b0a6",
+			Green: "#8fb896",
+			Yellow: "#d4be88",
+			Peach: "#d49e7a",
+			Red: "#cf767c",
+			Mauve: "#b49ec8",
+			Pink: "#cfa2b8",
+		},
+		Roles: Roles{
+			Accent: "text",
+			Accent2: "subtext0",
+			Accent3: "subtext1",
+		},
+		Type: TypeSpec{
+			Display: "manrope",
+			Body: "inter",
+			Mono: "jetbrains",
+			Weight: 700,
+			Tracking: "-0.03em",
+			BodyTracking: "0",
+			Case: "none",
+		},
+		Decor: "none",
+		HLJS: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css",
+	},
+	"matte-white": {
+		ID: "matte-white",
+		Label: "matte white",
+		Mood: Mood("light"),
+		Blurb: "Graphite ink on uncoated alabaster. Quiet, glare-free monochrome.",
+		Neutrals: Neutrals{
+			Crust: "#e8e8e5",
+			Mantle: "#f0f0ed",
+			Base: "#f7f7f5",
+			Surface0: "#dfdfd9",
+			Surface1: "#c9c9c2",
+			Surface2: "#adada5",
+			Overlay0: "#85857e",
+			Overlay1: "#666660",
+			Subtext0: "#474742",
+			Subtext1: "#2e2e2b",
+			Text: "#141413",
+		},
+		Accents: Accents{
+			Lavender: "#5e5e7a",
+			Blue: "#3b5f8a",
+			Sapphire: "#2f6b7d",
+			Sky: "#387282",
+			Teal: "#2f6e65",
+			Green: "#3f6e46",
+			Yellow: "#8f6b24",
+			Peach: "#9e522b",
+			Red: "#9e353a",
+			Mauve: "#694b82",
+			Pink: "#8f4868",
+		},
+		Roles: Roles{
+			Accent: "text",
+			Accent2: "subtext0",
+			Accent3: "overlay1",
+		},
+		Type: TypeSpec{
+			Display: "manrope",
+			Body: "inter",
+			Mono: "jetbrains",
+			Weight: 700,
+			Tracking: "-0.03em",
+			BodyTracking: "0",
+			Case: "none",
+		},
+		Decor: "none",
+		HLJS: "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css",
 	},
 }
 

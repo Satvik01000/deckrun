@@ -158,7 +158,7 @@ const RichContentRuntime = `(function () {
       return Promise.resolve();
     }
 
-    var lightThemes = ['daylight', 'paper', 'solarized', 'rosequartz', 'swiss', 'arctic', 'catppuccin-latte'];
+    var lightThemes = ['daylight', 'paper', 'solarized', 'rosequartz', 'swiss', 'arctic', 'catppuccin-latte', 'matte-white'];
     var curTheme = document.documentElement.dataset.theme || '';
     var isLight = lightThemes.indexOf(curTheme) !== -1;
     var targetMood = isLight ? 'light' : 'dark';

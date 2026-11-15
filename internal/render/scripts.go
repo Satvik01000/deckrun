@@ -1850,6 +1850,49 @@ const EditorBodyHTML = `<div id="app">
     <span class="spacer"></span>
     <span id="topbar-right">
     <button class="btn" id="btn-guide" title="Everything you can put on a slide">guide <kbd>Cmd /</kbd></button>
+    <button class="btn" id="btn-image" title="Insert a local image (Cmd Shift I)">image <kbd>Cmd Shift I</kbd></button>
+    <span class="menu" id="span-wrap">
+      <button class="btn" id="btn-span" aria-haspopup="true" aria-expanded="false" title="Wrap selection in a colored &lt;span&gt; (Cmd Shift C)">
+        <span class="span-dot" id="span-dot"></span>
+        <span>color</span>
+        <kbd>Cmd Shift C</kbd>
+      </button>
+      <div class="menu__pop menu__pop--span" id="span-menu">
+        <div class="menu-section">
+          <div class="menu-section__title">quick wrap &middot; <kbd>Cmd Shift C</kbd></div>
+          <div class="span-swatches" id="span-swatches"></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-section__title">preset style</div>
+          <div class="span-presets" id="span-presets">
+            <button type="button" data-span-preset="color">
+              <span class="menu__name">Text color</span>
+              <span class="menu__hint">&lt;span style="color: ..."&gt;</span>
+            </button>
+            <button type="button" data-span-preset="badge">
+              <span class="menu__name">Pill badge</span>
+              <span class="menu__hint">tinted background + rounded</span>
+            </button>
+            <button type="button" data-span-preset="underline">
+              <span class="menu__name">Underline</span>
+              <span class="menu__hint">colored bottom border</span>
+            </button>
+            <button type="button" data-span-preset="unwrap">
+              <span class="menu__name">Unwrap</span>
+              <span class="menu__hint">remove surrounding &lt;span&gt;</span>
+            </button>
+          </div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-section__title">custom style</div>
+          <div class="span-custom-row">
+            <input type="color" id="span-color-picker" value="#bf4300" title="Pick custom color">
+            <input type="text" id="span-style-input" value="color: #bf4300;" placeholder="color: #bf4300; font-weight: 600;" spellcheck="false" autocomplete="off">
+            <button type="button" class="btn btn--primary span-apply" id="span-apply-btn">wrap</button>
+          </div>
+        </div>
+      </div>
+    </span>
     <button class="btn" id="btn-palette" title="Insert anything">insert <kbd>Cmd K</kbd></button>
     <button class="btn" id="btn-new" title="Start a new Markdown deck or HTML doc">new</button>
     <span class="menu">
@@ -2065,7 +2108,57 @@ const EditorBodyHTML = `<div id="app">
   </div>
 </div>
 
+<div id="img-modal">
+  <div class="backdrop" data-close="imgmodal"></div>
+  <div id="img-box">
+    <div id="img-head">
+      <span>Insert local image</span>
+      <span class="img-head__sub">Browse from disk, pick from workspace, or enter a local path &nbsp;&middot;&nbsp; drag &amp; drop or paste supported</span>
+      <button data-close="imgmodal">close</button>
+    </div>
+    <div id="img-body">
+      <div class="img-modal__row" id="img-layout-row">
+        <span class="img-modal__label">layout</span>
+        <div class="img-layouts" id="img-layouts">
+          <button type="button" class="img-layout is-on" data-layout="inline">inline</button>
+          <button type="button" class="img-layout" data-layout="right">split right</button>
+          <button type="button" class="img-layout" data-layout="left">split left</button>
+          <button type="button" class="img-layout" data-layout="bg">background</button>
+        </div>
+      </div>
+      <div class="img-modal__row" id="img-size-row">
+        <span class="img-modal__label">size</span>
+        <div class="img-layouts" id="img-sizes">
+          <button type="button" class="img-layout is-on" data-img-size="">auto</button>
+          <button type="button" class="img-layout" data-img-size="35%">small (35%)</button>
+          <button type="button" class="img-layout" data-img-size="55%">medium (55%)</button>
+          <button type="button" class="img-layout" data-img-size="80%">large (80%)</button>
+        </div>
+      </div>
+      <div class="img-modal__row">
+        <span class="img-modal__label">from computer</span>
+        <div class="img-upload-row">
+          <button type="button" class="btn" id="img-upload-btn">Browse &amp; copy to ./assets/</button>
+          <span class="img-upload-hint">Saves a copy in <code>assets/</code> next to your deck and inserts it at the caret.</span>
+        </div>
+      </div>
+      <div class="img-modal__row">
+        <span class="img-modal__label">path on disk</span>
+        <div class="img-path-row">
+          <input id="img-path-input" type="text" placeholder="~/Desktop/screenshot.png or /Users/.../diagram.png" spellcheck="false" autocomplete="off">
+          <button type="button" class="btn btn--primary" id="img-path-insert">insert</button>
+        </div>
+      </div>
+      <div class="img-modal__row img-modal__row--col">
+        <span class="img-modal__label" id="img-ws-label">images in project folder</span>
+        <div id="img-workspace-list" class="img-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toasts"></div>
 <input type="file" id="file-any" accept=".md,.markdown,text/markdown,text/plain,.html,.htm,text/html" hidden>
+<input type="file" id="file-img" accept="image/*,video/*" hidden>
 
 `

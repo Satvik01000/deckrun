@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"html"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,14 +19,18 @@ type PositionedImage struct {
 	Src     string  `json:"src"`
 	Alt     string  `json:"alt"`
 	Opacity float64 `json:"opacity"`
+	Size    string  `json:"size,omitempty"`
+	Caption string  `json:"caption,omitempty"`
 }
 
 type Slide struct {
-	HTML       string           `json:"html"`
-	BGImage    *PositionedImage `json:"bgImage,omitempty"`
-	RightImage *PositionedImage `json:"rightImage,omitempty"`
-	LeftImage  *PositionedImage `json:"leftImage,omitempty"`
-	Notes      string           `json:"notes,omitempty"`
+	HTML        string             `json:"html"`
+	BGImage     *PositionedImage   `json:"bgImage,omitempty"`
+	RightImage  *PositionedImage   `json:"rightImage,omitempty"`
+	RightImages []*PositionedImage `json:"rightImages,omitempty"`
+	LeftImage   *PositionedImage   `json:"leftImage,omitempty"`
+	LeftImages  []*PositionedImage `json:"leftImages,omitempty"`
+	Notes       string             `json:"notes,omitempty"`
 }
 
 var mdRenderer = goldmark.New(
@@ -37,16 +43,262 @@ var mdRenderer = goldmark.New(
 )
 
 var notesRegex = regexp.MustCompile(`(?i)<!--\s*notes?:\s*([\s\S]*?)\s*-->`)
-var imgRegex = regexp.MustCompile(`!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)`)
+var imgRegex = regexp.MustCompile(`!\[([^\]]*)\]\((?:<([^>]+)>|([^")\n]+?))(?:\s+"([^"]*)")?\)`)
+var atImgRegex = regexp.MustCompile(`(?i)@img\(([^)\n]+)\)`)
 var opacityRegex = regexp.MustCompile(`opacity[=:]?\s*([0-9]*\.?[0-9]+)`)
 
-func parseImageDirective(title string) (position string, opacity float64) {
+func isRemoteOrSpecialURL(s string) bool {
+	lower := strings.ToLower(s)
+	return s == "" ||
+		strings.HasPrefix(lower, "http://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(lower, "data:") ||
+		strings.HasPrefix(lower, "blob:") ||
+		strings.HasPrefix(s, "#") ||
+		strings.HasPrefix(s, "/__")
+}
+
+func stripLocalScheme(s string) string {
+	lower := strings.ToLower(s)
+	if strings.HasPrefix(lower, "@local:") {
+		return strings.TrimSpace(s[len("@local:"):])
+	}
+	if strings.HasPrefix(lower, "local://") {
+		return strings.TrimSpace(s[len("local://"):])
+	}
+	if strings.HasPrefix(lower, "file://") {
+		return strings.TrimSpace(s[len("file://"):])
+	}
+	return s
+}
+
+// NormalizeLocalAssetURL rewrites local filesystem paths, @local: refs, ~/ paths,
+// parent-relative paths (../), and filenames with spaces to /__local?path=... while
+// keeping simple workspace-relative paths without spaces unchanged.
+func NormalizeLocalAssetURL(rawSrc string) string {
+	s := strings.TrimSpace(rawSrc)
+	if strings.HasPrefix(s, "<") && strings.HasSuffix(s, ">") && len(s) >= 2 {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+	}
+	if isRemoteOrSpecialURL(s) {
+		return s
+	}
+
+	lower := strings.ToLower(s)
+	needsLocal := strings.HasPrefix(lower, "@local:") ||
+		strings.HasPrefix(lower, "local://") ||
+		strings.HasPrefix(lower, "file://") ||
+		strings.HasPrefix(s, "~/") ||
+		strings.HasPrefix(s, "/") ||
+		strings.HasPrefix(s, "../") ||
+		strings.Contains(s, " ")
+
+	if !needsLocal {
+		return s
+	}
+
+	clean := stripLocalScheme(s)
+	return "/__local?path=" + url.QueryEscape(clean)
+}
+
+func normalizeExplicitLocalURL(rawSrc string) string {
+	s := strings.TrimSpace(rawSrc)
+	if strings.HasPrefix(s, "<") && strings.HasSuffix(s, ">") && len(s) >= 2 {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+	}
+	if isRemoteOrSpecialURL(s) {
+		return s
+	}
+	clean := stripLocalScheme(s)
+	return "/__local?path=" + url.QueryEscape(clean)
+}
+
+func isLikelyFileExt(ext string) bool {
+	if len(ext) < 2 || len(ext) > 6 || ext[0] != '.' || strings.Contains(ext, " ") {
+		return false
+	}
+	first := ext[1]
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) {
+		return false
+	}
+	for i := 2; i < len(ext); i++ {
+		c := ext[i]
+		isAlphaNum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+		if !isAlphaNum {
+			return false
+		}
+	}
+	return true
+}
+
+func defaultAltFromPath(p string) string {
+	base := filepath.Base(stripLocalScheme(strings.TrimSpace(p)))
+	ext := filepath.Ext(base)
+	alt := base
+	if isLikelyFileExt(ext) {
+		alt = strings.TrimSuffix(base, ext)
+	}
+	alt = strings.NewReplacer("\u202f", " ", "\u00a0", " ").Replace(alt)
+	if alt == "." || alt == "/" {
+		return ""
+	}
+	return alt
+}
+
+var cssSizeValRegex = regexp.MustCompile(`^(?:\d+(?:\.\d+)?)(?:%|px|vh|vw|rem|em)$`)
+var bareDigitsRegex = regexp.MustCompile(`^\d+(?:\.\d+)?$`)
+
+func parseImageSizeToken(token string) string {
+	t := strings.ToLower(strings.TrimSpace(token))
+	if t == "" {
+		return ""
+	}
+	switch t {
+	case "sm", "small":
+		return "width:35%;max-height:32vh;"
+	case "md", "medium":
+		return "width:55%;max-height:45vh;"
+	case "lg", "large":
+		return "width:80%;max-height:68vh;"
+	}
+
+	if strings.HasPrefix(t, "w:") || strings.HasPrefix(t, "w=") || strings.HasPrefix(t, "width:") || strings.HasPrefix(t, "width=") {
+		sep := strings.IndexAny(t, ":=")
+		val := strings.TrimSpace(t[sep+1:])
+		if bareDigitsRegex.MatchString(val) {
+			val += "px"
+		}
+		if cssSizeValRegex.MatchString(val) {
+			return "width:" + val + ";max-height:none;"
+		}
+		return ""
+	}
+
+	if strings.HasPrefix(t, "h:") || strings.HasPrefix(t, "h=") || strings.HasPrefix(t, "height:") || strings.HasPrefix(t, "height=") {
+		sep := strings.IndexAny(t, ":=")
+		val := strings.TrimSpace(t[sep+1:])
+		if bareDigitsRegex.MatchString(val) {
+			val += "px"
+		}
+		if cssSizeValRegex.MatchString(val) {
+			return "max-height:" + val + ";width:auto;"
+		}
+		return ""
+	}
+
+	if cssSizeValRegex.MatchString(t) {
+		if strings.HasSuffix(t, "vh") {
+			return "max-height:" + t + ";width:auto;"
+		}
+		return "width:" + t + ";max-height:none;"
+	}
+	return ""
+}
+
+func buildImgStyleAttr(sizeStyle string, op float64) string {
+	var parts []string
+	if sizeStyle != "" {
+		parts = append(parts, strings.TrimSuffix(sizeStyle, ";"))
+	}
+	if op < 1.0 {
+		parts = append(parts, fmt.Sprintf("opacity:%v", op))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(` style="%s;"`, html.EscapeString(strings.Join(parts, ";")))
+}
+
+func parseAtImgCaptionToken(seg string) (string, bool) {
+	s := strings.TrimSpace(seg)
+	low := strings.ToLower(s)
+	for _, prefix := range []string{"caption:", "caption=", "cap:", "cap=", "label:", "label="} {
+		if strings.HasPrefix(low, prefix) {
+			val := strings.TrimSpace(s[len(prefix):])
+			return strings.Trim(val, `"'`), true
+		}
+	}
+	return "", false
+}
+
+func parseAtImgInside(inside string) (src, alt, pos string, op float64, sizeStyle, caption string) {
+	pos = "inline"
+	op = 1.0
+
+	if !strings.Contains(inside, "|") {
+		// Check for optional trailing quoted directive: @img(path "right opacity:0.8")
+		reQuoted := regexp.MustCompile(`^(.*?)\s+"([^"]*)"\s*$`)
+		if m := reQuoted.FindStringSubmatch(strings.TrimSpace(inside)); len(m) > 2 {
+			src = strings.TrimSpace(m[1])
+			pos, op, sizeStyle = parseImageDirective(m[2])
+		} else {
+			src = strings.TrimSpace(inside)
+		}
+		src = strings.Trim(src, `"'`)
+		alt = defaultAltFromPath(src)
+		return src, alt, pos, op, sizeStyle, caption
+	}
+
+	parts := strings.Split(inside, "|")
+	src = strings.Trim(strings.TrimSpace(parts[0]), `"'`)
+	for _, rawSeg := range parts[1:] {
+		seg := strings.TrimSpace(rawSeg)
+		if seg == "" {
+			continue
+		}
+		lower := strings.ToLower(seg)
+		if lower == "right" || lower == "left" || lower == "bg" || lower == "inline" {
+			pos = lower
+			continue
+		}
+		if capVal, ok := parseAtImgCaptionToken(seg); ok {
+			caption = capVal
+			continue
+		}
+		if sz := parseImageSizeToken(seg); sz != "" {
+			sizeStyle = sz
+			continue
+		}
+		segPos, segOp, segSize := parseImageDirective(seg)
+		isDirectiveOnly := false
+		if segPos != "inline" {
+			pos = segPos
+			isDirectiveOnly = true
+		}
+		if segSize != "" {
+			sizeStyle = segSize
+			isDirectiveOnly = true
+		}
+		if opacityRegex.MatchString(lower) {
+			op = segOp
+			isDirectiveOnly = true
+		} else if strings.Contains(lower, ".") || lower == "0" || lower == "1" {
+			if val, err := strconv.ParseFloat(lower, 64); err == nil && val >= 0 && val <= 1 {
+				op = val
+				isDirectiveOnly = true
+			}
+		}
+		if !isDirectiveOnly && alt == "" {
+			alt = strings.Trim(seg, `"'`)
+		}
+	}
+	if alt == "" {
+		if caption != "" {
+			alt = caption
+		} else {
+			alt = defaultAltFromPath(src)
+		}
+	}
+	return src, alt, pos, op, sizeStyle, caption
+}
+
+func parseImageDirective(title string) (position string, opacity float64, sizeStyle string) {
 	position = "inline"
 	opacity = 1.0
 
 	t := strings.ToLower(strings.TrimSpace(title))
 	if t == "" {
-		return position, opacity
+		return position, opacity, sizeStyle
 	}
 
 	if strings.Contains(t, "right") {
@@ -68,7 +320,13 @@ func parseImageDirective(title string) (position string, opacity float64) {
 		}
 	}
 
-	return position, opacity
+	for _, tok := range strings.Fields(t) {
+		if sz := parseImageSizeToken(tok); sz != "" {
+			sizeStyle = sz
+		}
+	}
+
+	return position, opacity, sizeStyle
 }
 
 // SplitSlides splits markdown into individual slides by "---" on its own line,
@@ -414,21 +672,22 @@ func extractNotesAndPositionedImages(raw string, slide *Slide) string {
 		}
 		chunk = notesRegex.ReplaceAllString(chunk, "")
 
-		matches := imgRegex.FindAllStringSubmatch(chunk, -1)
-		for _, m := range matches {
+		// 1. Handle @img(...) shorthand tags
+		atMatches := atImgRegex.FindAllStringSubmatch(chunk, -1)
+		for _, m := range atMatches {
 			full := m[0]
-			alt := m[1]
-			src := m[2]
-			titleAttr := ""
-			if len(m) > 3 {
-				titleAttr = m[3]
+			inside := m[1]
+			src, alt, pos, op, sizeStyle, caption := parseAtImgInside(inside)
+			if src == "" {
+				continue
 			}
-
-			pos, op := parseImageDirective(titleAttr)
+			normSrc := normalizeExplicitLocalURL(src)
 			img := &PositionedImage{
-				Src:     src,
+				Src:     normSrc,
 				Alt:     alt,
 				Opacity: op,
+				Size:    sizeStyle,
+				Caption: caption,
 			}
 
 			switch pos {
@@ -437,10 +696,74 @@ func extractNotesAndPositionedImages(raw string, slide *Slide) string {
 				chunk = strings.Replace(chunk, full, "", 1)
 			case "right":
 				slide.RightImage = img
+				slide.RightImages = append(slide.RightImages, img)
 				chunk = strings.Replace(chunk, full, "", 1)
 			case "left":
 				slide.LeftImage = img
+				slide.LeftImages = append(slide.LeftImages, img)
 				chunk = strings.Replace(chunk, full, "", 1)
+			default:
+				styleAttr := buildImgStyleAttr(sizeStyle, op)
+				imgTag := fmt.Sprintf(`<img src="%s" alt="%s"%s />`, html.EscapeString(normSrc), html.EscapeString(alt), styleAttr)
+				if caption != "" {
+					imgTag = fmt.Sprintf(`<figure class="slide__figure">%s<figcaption>%s</figcaption></figure>`, imgTag, html.EscapeString(caption))
+				}
+				chunk = strings.Replace(chunk, full, imgTag, 1)
+			}
+		}
+
+		// 2. Handle standard Markdown ![alt](src "title") images
+		matches := imgRegex.FindAllStringSubmatch(chunk, -1)
+		for _, m := range matches {
+			full := m[0]
+			alt := m[1]
+			rawSrc := strings.TrimSpace(m[2])
+			if rawSrc == "" && len(m) > 3 {
+				rawSrc = strings.TrimSpace(m[3])
+			}
+			titleAttr := ""
+			if len(m) > 4 {
+				titleAttr = m[4]
+			}
+			if rawSrc == "" {
+				continue
+			}
+
+			normSrc := NormalizeLocalAssetURL(rawSrc)
+			pos, op, sizeStyle := parseImageDirective(titleAttr)
+			img := &PositionedImage{
+				Src:     normSrc,
+				Alt:     alt,
+				Opacity: op,
+				Size:    sizeStyle,
+			}
+
+			switch pos {
+			case "bg":
+				slide.BGImage = img
+				chunk = strings.Replace(chunk, full, "", 1)
+			case "right":
+				slide.RightImage = img
+				slide.RightImages = append(slide.RightImages, img)
+				chunk = strings.Replace(chunk, full, "", 1)
+			case "left":
+				slide.LeftImage = img
+				slide.LeftImages = append(slide.LeftImages, img)
+				chunk = strings.Replace(chunk, full, "", 1)
+			default:
+				if sizeStyle != "" || op < 1.0 {
+					styleAttr := buildImgStyleAttr(sizeStyle, op)
+					repl := fmt.Sprintf(`<img src="%s" alt="%s"%s />`, html.EscapeString(normSrc), html.EscapeString(alt), styleAttr)
+					chunk = strings.Replace(chunk, full, repl, 1)
+				} else if normSrc != rawSrc || m[2] != "" {
+					var repl string
+					if titleAttr != "" {
+						repl = fmt.Sprintf(`![%s](%s "%s")`, alt, normSrc, titleAttr)
+					} else {
+						repl = fmt.Sprintf(`![%s](%s)`, alt, normSrc)
+					}
+					chunk = strings.Replace(chunk, full, repl, 1)
+				}
 			}
 		}
 		outLines = append(outLines, chunk)
@@ -539,4 +862,69 @@ func DocTitle(rawHTML string, fallback string) string {
 	}
 	return fallback
 }
+
+var htmlMediaTagRegex = regexp.MustCompile(`(?i)(<(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
+
+func isLocalHTMLAssetSrc(src string) bool {
+	s := strings.TrimSpace(src)
+	if isRemoteOrSpecialURL(s) {
+		return false
+	}
+	lower := strings.ToLower(s)
+	return strings.HasPrefix(lower, "@local:") ||
+		strings.HasPrefix(lower, "local://") ||
+		strings.HasPrefix(lower, "file://") ||
+		strings.HasPrefix(s, "~/") ||
+		strings.HasPrefix(s, "../") ||
+		strings.HasPrefix(s, "/Users/") ||
+		strings.HasPrefix(s, "/home/") ||
+		strings.HasPrefix(s, "/tmp/") ||
+		strings.HasPrefix(s, "/var/") ||
+		strings.HasPrefix(s, "/opt/") ||
+		strings.HasPrefix(s, "/Volumes/")
+}
+
+// RewriteLocalAssetURLsInHTML expands @img(...) tags and rewrites local asset
+// URLs on <img>, <video>, and <source> tags to /__local?path=... for HTML docs.
+func RewriteLocalAssetURLsInHTML(rawHTML string) string {
+	out := atImgRegex.ReplaceAllStringFunc(rawHTML, func(match string) string {
+		m := atImgRegex.FindStringSubmatch(match)
+		if len(m) < 2 {
+			return match
+		}
+		src, alt, _, op, sizeStyle, caption := parseAtImgInside(m[1])
+		if src == "" {
+			return match
+		}
+		normSrc := normalizeExplicitLocalURL(src)
+		style := buildImgStyleAttr(sizeStyle, op)
+		imgTag := fmt.Sprintf(`<img src="%s" alt="%s"%s />`, html.EscapeString(normSrc), html.EscapeString(alt), style)
+		if caption != "" {
+			return fmt.Sprintf(`<figure class="slide__figure">%s<figcaption>%s</figcaption></figure>`, imgTag, html.EscapeString(caption))
+		}
+		return imgTag
+	})
+
+	out = htmlMediaTagRegex.ReplaceAllStringFunc(out, func(match string) string {
+		m := htmlMediaTagRegex.FindStringSubmatch(match)
+		if len(m) < 4 {
+			return match
+		}
+		prefix := m[1]
+		quote := `"`
+		srcVal := m[2]
+		if srcVal == "" && m[3] != "" {
+			srcVal = m[3]
+			quote = `'`
+		}
+		if !isLocalHTMLAssetSrc(srcVal) {
+			return match
+		}
+		norm := NormalizeLocalAssetURL(srcVal)
+		return prefix + quote + html.EscapeString(norm) + quote
+	})
+
+	return out
+}
+
 

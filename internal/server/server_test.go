@@ -2,9 +2,11 @@ package server_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,5 +155,90 @@ func TestFindFreePort(t *testing.T) {
 	p := server.FindFreePort(7890)
 	if p <= 0 {
 		t.Errorf("expected valid port, got %d", p)
+	}
+}
+
+func TestLocalMediaUploadListAndServe(t *testing.T) {
+	baseDir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsidePNG := filepath.Join(outsideDir, "chart screenshot.png")
+	_ = os.WriteFile(outsidePNG, []byte("PNGDATA"), 0644)
+	_ = os.WriteFile(filepath.Join(baseDir, "secret.env"), []byte("SECRET=1"), 0644)
+
+	srv := server.NewServer(server.Mode{
+		Theme:      "nord",
+		Template:   "classic",
+		Transition: "slide",
+		Origin:     "http://127.0.0.1:7890",
+	}, baseDir, nil)
+
+	// 1. GET /__local serves an allowed external media file
+	req := httptest.NewRequest(http.MethodGet, "/__local?path="+url.QueryEscape(outsidePNG), nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || w.Body.String() != "PNGDATA" {
+		t.Errorf("GET /__local external png returned %d (%q)", w.Code, w.Body.String())
+	}
+
+	// 1b. GET /__local resolves extensionless macOS screenshot with \u202f narrow no-break space
+	macShotName := "Screenshot 2026-11-14 at 11.31.58\u202fAM.png"
+	_ = os.WriteFile(filepath.Join(outsideDir, macShotName), []byte("MACSHOT"), 0644)
+	macShotQuery := filepath.Join(outsideDir, "Screenshot 2026-11-14 at 11.31.58 AM")
+	req = httptest.NewRequest(http.MethodGet, "/__local?path="+url.QueryEscape(macShotQuery), nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || w.Body.String() != "MACSHOT" || !strings.HasPrefix(w.Header().Get("Content-Type"), "image/png") {
+		t.Errorf("GET /__local macOS extensionless screenshot returned %d CT=%q body=%q", w.Code, w.Header().Get("Content-Type"), w.Body.String())
+	}
+
+	// 2. GET /__local rejects non-media extensions with 403
+	req = httptest.NewRequest(http.MethodGet, "/__local?path="+url.QueryEscape(filepath.Join(baseDir, "secret.env")), nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for non-media file, got %d", w.Code)
+	}
+
+	// 3. POST /__upload-asset writes image to baseDir/assets/
+	uploadBody, _ := json.Marshal(map[string]string{
+		"name": "My Screenshot.png",
+		"data": "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("UPLOADED")),
+	})
+	req = httptest.NewRequest(http.MethodPost, "/__upload-asset", bytes.NewReader(uploadBody))
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST /__upload-asset failed with %d: %s", w.Code, w.Body.String())
+	}
+	var upResp struct {
+		Path string `json:"path"`
+		URL  string `json:"url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &upResp); err != nil {
+		t.Fatalf("unmarshal upload resp: %v", err)
+	}
+	if upResp.Path != "assets/my-screenshot.png" {
+		t.Errorf("expected assets/my-screenshot.png, got %q", upResp.Path)
+	}
+	diskData, err := os.ReadFile(filepath.Join(baseDir, upResp.Path))
+	if err != nil || string(diskData) != "UPLOADED" {
+		t.Errorf("uploaded file not written to disk cleanly: %v, %q", err, string(diskData))
+	}
+
+	// 4. GET /__assets lists the uploaded image
+	req = httptest.NewRequest(http.MethodGet, "/__assets", nil)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /__assets failed with %d", w.Code)
+	}
+	var listResp struct {
+		Files []string `json:"files"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("unmarshal assets resp: %v", err)
+	}
+	if len(listResp.Files) != 1 || listResp.Files[0] != "assets/my-screenshot.png" {
+		t.Errorf("expected [assets/my-screenshot.png], got %+v", listResp.Files)
 	}
 }
