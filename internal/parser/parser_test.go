@@ -169,3 +169,111 @@ func TestCodeSpansAndFencedImagesAndComplexMath(t *testing.T) {
 	}
 }
 
+func TestLocalImagesAndAtImgTags(t *testing.T) {
+	md := `# Slide 1
+@img(~/Desktop/my screenshot.png | right | opacity:0.85 | System Diagram)
+@img(/Users/test/inline pic.png)
+@img(~/Desktop/Screenshot 2026-11-14 at 11.31.58 AM)
+@img(~/Desktop/bg.png | bg | 0.65)
+![Alt](~/Desktop/file with spaces.png "left")
+`
+	slides := parser.ParseSlides(md)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	s := slides[0]
+	if s.RightImage == nil || s.RightImage.Alt != "System Diagram" || s.RightImage.Opacity != 0.85 || !strings.HasPrefix(s.RightImage.Src, "/__local?path=") {
+		t.Errorf("RightImage from @img mismatch: %+v", s.RightImage)
+	}
+	if s.BGImage == nil || s.BGImage.Opacity != 0.65 || s.BGImage.Alt != "bg" {
+		t.Errorf("BGImage bare opacity mismatch: %+v", s.BGImage)
+	}
+	if s.LeftImage == nil || !strings.HasPrefix(s.LeftImage.Src, "/__local?path=") {
+		t.Errorf("LeftImage from Markdown space path mismatch: %+v", s.LeftImage)
+	}
+	if !strings.Contains(s.HTML, `src="/__local?path=%2FUsers%2Ftest%2Finline+pic.png"`) {
+		t.Errorf("inline @img tag not rendered cleanly: %s", s.HTML)
+	}
+	if !strings.Contains(s.HTML, `alt="Screenshot 2026-11-14 at 11.31.58 AM"`) {
+		t.Errorf("extensionless timestamp alt should not be truncated: %s", s.HTML)
+	}
+}
+
+func TestRewriteLocalAssetURLsInHTML(t *testing.T) {
+	raw := `<div>@img(~/Pictures/hero banner.png | opacity:0.9 | Hero)
+<img src="@local:~/Desktop/shot.png" alt="Shot">
+<img src="/Users/alice/diagram.png">
+<img src="https://example.com/remote.png"></div>`
+
+	out := parser.RewriteLocalAssetURLsInHTML(raw)
+	if !strings.Contains(out, `src="/__local?path=~%2FPictures%2Fhero+banner.png"`) || !strings.Contains(out, `alt="Hero"`) || !strings.Contains(out, `opacity:0.9`) {
+		t.Errorf("@img in HTML was not rewritten cleanly: %s", out)
+	}
+	if !strings.Contains(out, `src="/__local?path=~%2FDesktop%2Fshot.png"`) {
+		t.Errorf("@local: img in HTML was not rewritten: %s", out)
+	}
+	if !strings.Contains(out, `src="/__local?path=%2FUsers%2Falice%2Fdiagram.png"`) {
+		t.Errorf("absolute local img path in HTML was not rewritten: %s", out)
+	}
+	if !strings.Contains(out, `src="https://example.com/remote.png"`) {
+		t.Errorf("remote URL should remain untouched: %s", out)
+	}
+}
+
+func TestMultipleImagesPerSlideAndSizeScaling(t *testing.T) {
+	md := `# Multi & Scaled
+@img(~/College/Notes Images/Scaling example | right | 70%)
+@img(~/College/Notes Images/12 | right | h:220px)
+@img(~/Desktop/inline-one.png | 50%)
+![Chart](~/Desktop/chart.png "w:320px")
+`
+	slides := parser.ParseSlides(md)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	s := slides[0]
+	if len(s.RightImages) != 2 {
+		t.Fatalf("expected 2 right images, got %d: %+v", len(s.RightImages), s.RightImages)
+	}
+	if !strings.Contains(s.RightImages[0].Src, "Scaling+example") || !strings.Contains(s.RightImages[0].Size, "width:70%") {
+		t.Errorf("first right image mismatch: %+v", s.RightImages[0])
+	}
+	if !strings.Contains(s.RightImages[1].Src, "12") || !strings.Contains(s.RightImages[1].Size, "height:220px") {
+		t.Errorf("second right image mismatch: %+v", s.RightImages[1])
+	}
+	if !strings.Contains(s.HTML, `style="width:50%`) {
+		t.Errorf("inline @img 50%% width missing in HTML: %s", s.HTML)
+	}
+	if !strings.Contains(s.HTML, `style="width:320px`) {
+		t.Errorf("markdown image w:320px width missing in HTML: %s", s.HTML)
+	}
+
+	htmlOut := parser.RewriteLocalAssetURLsInHTML(`<p>@img(~/Pictures/hero.png | 45%)</p>`)
+	if !strings.Contains(htmlOut, `width:45%`) {
+		t.Errorf("RewriteLocalAssetURLsInHTML missing size style: %s", htmlOut)
+	}
+}
+
+func TestAtImgCaptions(t *testing.T) {
+	md := `@img(assets/image-3.png | h:56vh | left | caption:SDLC)
+@img(assets/image-4.png | h:56vh | right | label:MLLC)
+@img(assets/inline.png | cap:Pipeline)
+`
+	slides := parser.ParseSlides(md)
+	if len(slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(slides))
+	}
+	s := slides[0]
+	if s.LeftImage == nil || s.LeftImage.Caption != "SDLC" {
+		t.Errorf("LeftImage caption mismatch: %+v", s.LeftImage)
+	}
+	if s.RightImage == nil || s.RightImage.Caption != "MLLC" {
+		t.Errorf("RightImage caption mismatch: %+v", s.RightImage)
+	}
+	if !strings.Contains(s.HTML, `<figure class="slide__figure">`) || !strings.Contains(s.HTML, `<figcaption>Pipeline</figcaption>`) {
+		t.Errorf("inline caption figure missing: %s", s.HTML)
+	}
+}
+
+
+

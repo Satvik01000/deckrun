@@ -74,3 +74,24 @@ body.is-grid #presentation {
 }
 
 body.is-empty #pv-empty { display: flex; }
+
+/* Sync highlight pulse when jumping between preview and Markdown source */
+@keyframes drSyncFlash {
+  0% {
+    background-color: var(--accent-soft, rgba(56, 139, 253, 0.25));
+    box-shadow: 0 0 0 6px var(--accent-soft, rgba(56, 139, 253, 0.22));
+  }
+  70% {
+    background-color: var(--accent-soft, rgba(56, 139, 253, 0.14));
+    box-shadow: 0 0 0 4px var(--accent-soft, rgba(56, 139, 253, 0.12));
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.dr-sync-flash {
+  border-radius: 6px;
+  animation: drSyncFlash 1.4s ease-out;
+}

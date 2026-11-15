@@ -235,6 +235,7 @@ const HighlightRuntime = `(function () {
     var pending = null;    // the selection the bar is offering to highlight
     var openId = null;     // highlight whose comment card is open
     var bar = null, card = null;
+    var selectTimer = null;
 
     function target() {
       if (opts.doc) return opts.doc;
@@ -331,6 +332,10 @@ const HighlightRuntime = `(function () {
       if (!readOnly) {
         doc.addEventListener('mouseup', onSelect, true);
         doc.addEventListener('keyup', onSelect, true);
+        doc.addEventListener('dblclick', function () {
+          if (selectTimer) { clearTimeout(selectTimer); selectTimer = null; }
+          hideBar();
+        }, true);
       }
       doc.addEventListener('click', onClickMark, true);
       doc.addEventListener('scroll', reposition, true);
@@ -394,7 +399,8 @@ const HighlightRuntime = `(function () {
     // ── Selection bar ──
     function onSelect(e) {
       if (e && e.type === 'keyup' && !e.shiftKey && e.key !== 'Shift') return;
-      setTimeout(readSelection, 0);
+      if (selectTimer) clearTimeout(selectTimer);
+      selectTimer = setTimeout(readSelection, 180);
     }
 
     function readSelection() {

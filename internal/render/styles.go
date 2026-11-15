@@ -144,6 +144,13 @@ html, body {
   max-height: 80vh;
 }
 
+.slide__image-panel--multi {
+  flex-direction: column;
+  gap: 1.1rem;
+  overflow: hidden;
+  max-height: 78vh;
+}
+
 .slide__image-panel img {
   max-width: 100%;
   max-height: 78vh;
@@ -151,6 +158,43 @@ html, body {
   border-radius: 12px;
   border: 1px solid var(--hairline);
   box-shadow: var(--shadow-lg);
+}
+
+.slide__image-panel--multi img {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: calc((78vh - 2.2rem) / var(--panel-count, 2)) !important;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.slide__figure {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  max-width: 100%;
+  min-height: 0;
+}
+
+.slide__figure img {
+  margin: 0;
+}
+
+.slide__figure figcaption {
+  margin-top: 0.65rem;
+  font-size: clamp(0.88rem, 1.25vw, 1.08rem);
+  font-weight: 600;
+  color: var(--subtext1);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.slide__image-panel--multi .slide__figure {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Typography ───────────────────────────────────────────────────────── */
@@ -431,6 +475,23 @@ html, body {
   display: block;
   margin: 1rem auto;
   box-shadow: var(--shadow-md);
+}
+
+.slide__content p > img:not(:only-child) {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0.5rem 0.6rem;
+}
+
+.slide__content .slide__figure {
+  display: flex;
+  margin: 1rem auto;
+}
+
+.slide__content p > .slide__figure:not(:only-child) {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0.5rem 0.8rem;
 }
 
 /* ── Embeds: raw HTML iframe / video ─────────────────────────────────── */
@@ -744,6 +805,7 @@ const ChromeCSS = `/* ── HUD (progress + counter) ────────�
 
   .slide__image-panel { max-height: calc(7.5in - var(--slide-pad-y) * 2) !important; }
   .slide__image-panel img { max-height: calc(7.5in - var(--slide-pad-y) * 2 - 1rem) !important; }
+  .slide__image-panel--multi img { max-height: calc((7.5in - var(--slide-pad-y) * 2 - 1.5rem) / var(--panel-count, 2)) !important; }
   .slide__content img { max-height: 4in !important; }
   .slide__content iframe, .slide__content video { max-height: 4in !important; }
 

@@ -23,6 +23,8 @@
     split:   'deckrun.split.v1',
     mode:    'deckrun.mode.v1',
     nudge:   'deckrun.nudges.v1',
+    spanColor: 'deckrun.span.color.v1',
+    spanStyle: 'deckrun.span.style.v1',
     // Superseded by the deck library, read once to migrate.
     oldDoc:  'presentmd.doc.v1',
     oldName: 'presentmd.name.v1'
@@ -271,6 +273,8 @@
     body: pickFont(lsGet(K.body, D.fonts.body)),
     template: pickTemplate(lsGet(K.template, D.template)),
     transition: pickTransition(lsGet(K.transition, D.transition)),
+    spanColor: /^#[0-9a-f]{6}$/i.test(lsGet(K.spanColor, '#bf4300')) ? lsGet(K.spanColor, '#bf4300') : '#bf4300',
+    spanStyle: lsGet(K.spanStyle, '') || ('color: ' + (/^#[0-9a-f]{6}$/i.test(lsGet(K.spanColor, '#bf4300')) ? lsGet(K.spanColor, '#bf4300') : '#bf4300') + ';'),
     frameReady: false,
     overflow: {},
     dismissed: {},
@@ -456,6 +460,9 @@
     return out.replace(new RegExp(HOLD + '(\\d+)' + HOLD, 'g'), function (m, i) { return held[+i]; });
   }
 
+  var syncFlashRange = null;
+  var syncFlashTimer = null;
+
   function highlightMarkdown(text) {
     var lines = text.split('\n');
     var out = [];
@@ -463,56 +470,67 @@
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
+      var htmlLine = '';
 
       // A pasted data URI is one enormous line. Colour it in a single pass so
       // typing stays responsive.
       if (line.length > 4000) {
-        out.push('<span class="t-url">' + esc(line) + '</span>');
-        continue;
-      }
-
-      if (/^\s*```/.test(line)) {
-        out.push('<span class="t-fence">' + esc(line) + '</span>');
+        htmlLine = '<span class="t-url">' + esc(line) + '</span>';
+      } else if (/^\s*```/.test(line)) {
+        htmlLine = '<span class="t-fence">' + esc(line) + '</span>';
         inFence = !inFence;
-        continue;
-      }
-      if (inFence) { out.push('<span class="t-codeline">' + esc(line) + '</span>'); continue; }
-      if (/^[ \t]*---[ \t]*$/.test(line)) {
-        out.push('<span class="t-sep">' + esc(line) + '</span>');
-        continue;
-      }
-      if (/^\s*<!--/.test(line)) {
-        out.push('<span class="t-note">' + esc(line) + '</span>');
-        continue;
+      } else if (inFence) {
+        htmlLine = '<span class="t-codeline">' + esc(line) + '</span>';
+      } else if (/^[ \t]*---[ \t]*$/.test(line)) {
+        htmlLine = '<span class="t-sep">' + esc(line) + '</span>';
+      } else if (/^\s*<!--/.test(line)) {
+        htmlLine = '<span class="t-note">' + esc(line) + '</span>';
+      } else {
+        var head = line.match(/^(#{1,6})\s/);
+        if (head) {
+          var lvl = Math.min(head[1].length, 4);
+          htmlLine = '<span class="t-h' + lvl + '">' + inlineTokens(line) + '</span>';
+        } else if (/^\s*>/.test(line)) {
+          htmlLine = '<span class="t-quote">' + inlineTokens(line) + '</span>';
+        } else if (/^\s*\|.*\|\s*$/.test(line)) {
+          htmlLine = '<span class="t-table">' + inlineTokens(line) + '</span>';
+        } else {
+          var marker = line.match(/^(\s*)([-*+]|\d+[.)])(\s+)/);
+          if (marker) {
+            htmlLine = marker[1] + '<span class="t-marker">' + esc(marker[2]) + '</span>' + marker[3] +
+              inlineTokens(line.slice(marker[0].length));
+          } else {
+            htmlLine = inlineTokens(line);
+          }
+        }
       }
 
-      var head = line.match(/^(#{1,6})\s/);
-      if (head) {
-        var lvl = Math.min(head[1].length, 4);
-        out.push('<span class="t-h' + lvl + '">' + inlineTokens(line) + '</span>');
-        continue;
+      if (syncFlashRange && i >= syncFlashRange.startLine && i <= syncFlashRange.endLine) {
+        htmlLine = '<span class="t-sync-line">' + htmlLine + '</span>';
       }
-      if (/^\s*>/.test(line)) {
-        out.push('<span class="t-quote">' + inlineTokens(line) + '</span>');
-        continue;
-      }
-      if (/^\s*\|.*\|\s*$/.test(line)) {
-        out.push('<span class="t-table">' + inlineTokens(line) + '</span>');
-        continue;
-      }
-      var marker = line.match(/^(\s*)([-*+]|\d+[.)])(\s+)/);
-      if (marker) {
-        out.push(marker[1] + '<span class="t-marker">' + esc(marker[2]) + '</span>' + marker[3] +
-          inlineTokens(line.slice(marker[0].length)));
-        continue;
-      }
-      out.push(inlineTokens(line));
+      out.push(htmlLine);
     }
 
     return out.join('\n') + '\n';
   }
 
   function paint() { hl.innerHTML = highlightMarkdown(src.value); }
+
+  function flashEditorLines(startPos, endPos) {
+    if (syncFlashTimer) { clearTimeout(syncFlashTimer); syncFlashTimer = null; }
+    var text = src.value;
+    var s = Math.max(0, Math.min(startPos || 0, text.length));
+    var e = Math.max(s, Math.min(endPos || s, text.length));
+    var startLine = text.slice(0, s).split('\n').length - 1;
+    var endLine = text.slice(0, e).split('\n').length - 1;
+    syncFlashRange = { startLine: startLine, endLine: endLine };
+    paint();
+    syncFlashTimer = setTimeout(function () {
+      syncFlashRange = null;
+      syncFlashTimer = null;
+      paint();
+    }, 1800);
+  }
 
   function syncScroll() { hl.scrollTop = src.scrollTop; hl.scrollLeft = src.scrollLeft; }
 
@@ -574,7 +592,7 @@
   }
 
   function layout() {
-    var padding = 32;
+    var padding = (stage.clientWidth < 760 || stage.clientHeight < 420) ? 16 : 32;
     var w = Math.max(120, stage.clientWidth - padding);
     var h = Math.max(90, stage.clientHeight - padding);
     var scale;
@@ -1082,14 +1100,413 @@
     palette.classList.remove('is-on');
     guide.classList.remove('is-on');
     $('library').classList.remove('is-on');
+    $('img-modal').classList.remove('is-on');
     if ($('themes').classList.contains('is-on')) closeThemes(true);
     updateDocTitle();
-    if (!keepFocus) src.focus();
+    if (!keepFocus) {
+      if (state.kind === 'html') srcHtml.focus();
+      else src.focus();
+    }
   }
 
   Array.prototype.forEach.call(document.querySelectorAll('[data-close]'), function (el) {
     el.addEventListener('click', function () { closeOverlays(); });
   });
+
+  // ── Local images & HTML asset rewriting ───────────────────────────────
+  var imgLayout = 'inline';
+  var imgSize = '';
+
+  function parsePreviewImgSize(seg) {
+    var low = (seg || '').trim().toLowerCase();
+    if (!low) return '';
+    if (low === 'sm' || low === 'small') return 'width:35%;height:auto;max-width:none;';
+    if (low === 'md' || low === 'medium') return 'width:55%;height:auto;max-width:none;';
+    if (low === 'lg' || low === 'large') return 'width:80%;height:auto;max-width:none;';
+    var wh = low.match(/^(?:size|w|width|h|height)\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)(%|px|vh|vw|rem|em)?$/i);
+    if (wh) {
+      var val = wh[1] + (wh[2] || 'px');
+      return low.charAt(0) === 'h'
+        ? 'height:' + val + ';max-height:' + val + ';width:auto;max-width:none;'
+        : 'width:' + val + ';height:auto;max-width:none;';
+    }
+    var plain = low.match(/^([0-9]+(?:\.[0-9]+)?)(%|px|vh|vw|rem|em)$/i);
+    if (plain) {
+      var uval = plain[1] + plain[2];
+      return plain[2].toLowerCase() === 'vh'
+        ? 'height:' + uval + ';max-height:' + uval + ';width:auto;max-width:none;'
+        : 'width:' + uval + ';height:auto;max-width:none;';
+    }
+    return '';
+  }
+
+  function rewriteHtmlForPreview(raw) {
+    if (!raw) return raw;
+    function toLocalUrl(s) {
+      var v = (s || '').trim();
+      if (!v || /^(https?:|data:|blob:|#|\/__)/i.test(v)) return v;
+      v = v.replace(/^(@local:|local:\/\/|file:\/\/)/i, '').trim();
+      return '/__local?path=' + encodeURIComponent(v);
+    }
+    var out = raw.replace(/@img\(([^)\n]+)\)/gi, function (_m, inside) {
+      var parts = inside.split('|');
+      var pathPart = parts[0].trim();
+      var op = '';
+      var sizeStyle = '';
+      var caption = '';
+      var alt = '';
+      if (parts.length === 1) {
+        var qm = inside.match(/^(.*?)\s+"([^"]*)"\s*$/);
+        if (qm) {
+          pathPart = qm[1].trim();
+          var om = qm[2].match(/opacity[=:]?\s*([0-9]*\.?[0-9]+)/i);
+          if (om) op = om[1];
+        }
+      } else {
+        for (var i = 1; i < parts.length; i++) {
+          var seg = parts[i].trim();
+          var low = seg.toLowerCase();
+          if (!seg) continue;
+          if (low === 'right' || low === 'left' || low === 'bg' || low === 'inline') continue;
+          var capM = seg.match(/^(?:caption|cap|label)\s*[:=]\s*(.+)$/i);
+          if (capM) { caption = capM[1].trim().replace(/^["']|["']$/g, ''); continue; }
+          var om2 = seg.match(/opacity[=:]?\s*([0-9]*\.?[0-9]+)/i);
+          if (om2) { op = om2[1]; continue; }
+          var sz = parsePreviewImgSize(seg);
+          if (sz) { sizeStyle += sz; continue; }
+          if (!alt) alt = seg.replace(/^["']|["']$/g, '');
+        }
+      }
+      pathPart = pathPart.replace(/^["']|["']$/g, '');
+      if (!alt) alt = caption || pathPart.split('/').pop().replace(/\.[^.]+$/, '');
+      var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); };
+      var combinedStyle = (sizeStyle || '') + (op ? 'opacity:' + esc(op) + ';' : '');
+      var styleAttr = combinedStyle ? ' style="' + esc(combinedStyle) + '"' : '';
+      var imgHtml = '<img src="' + esc(toLocalUrl(pathPart)) + '" alt="' + esc(alt) + '"' + styleAttr + ' />';
+      if (caption) return '<figure class="slide__figure">' + imgHtml + '<figcaption>' + esc(caption) + '</figcaption></figure>';
+      return imgHtml;
+    });
+    out = out.replace(/(<(?:img|video|source)\b[^>]*?\bsrc\s*=\s*)(?:"([^"]*)"|'([^']*)')/gi, function (m, prefix, dq, sq) {
+      var quote = dq !== undefined ? '"' : "'";
+      var val = dq !== undefined ? dq : sq;
+      if (!val || /^(https?:|data:|blob:|#|\/__)/i.test(val.trim())) return m;
+      if (/^(@local:|local:\/\/|file:\/\/|~\/|\.\.\/|\/(?:Users|home|tmp|var|opt|Volumes)\/)/i.test(val.trim())) {
+        return prefix + quote + toLocalUrl(val) + quote;
+      }
+      return m;
+    });
+    return out;
+  }
+
+  function insertTextAtHtmlCaret(text) {
+    srcHtml.focus();
+    var s = srcHtml.selectionStart, e = srcHtml.selectionEnd;
+    var inserted = false;
+    try { inserted = document.execCommand('insertText', false, text); } catch (err) {}
+    if (!inserted) {
+      srcHtml.setRangeText(text, s, e, 'end');
+    }
+    var pos = s + text.length;
+    srcHtml.setSelectionRange(pos, pos);
+    onHtmlInput();
+  }
+
+  function insertLocalImageRef(pathStr, layout, alt) {
+    var cleanPath = (pathStr || '').trim();
+    if (!cleanPath) return;
+    if (state.kind === 'html') {
+      var safeAlt = (alt || cleanPath.split('/').pop().replace(/\.[^.]+$/, '') || 'image').replace(/"/g, '&quot;');
+      var srcVal = cleanPath;
+      if (!/^(https?:|data:|blob:|\/__)/i.test(cleanPath) && (/^(~\/|\/|\.\.\/)/.test(cleanPath) || cleanPath.indexOf(' ') !== -1)) {
+        srcVal = '@local:' + cleanPath;
+      }
+      var htmlStyle = imgSize
+        ? 'width:' + imgSize + ';max-width:100%;height:auto;'
+        : 'max-width:100%;height:auto;';
+      insertTextAtHtmlCaret('<img src="' + srcVal + '" alt="' + safeAlt + '" style="' + htmlStyle + '" />\n');
+      return;
+    }
+    var lay = layout || imgLayout || 'inline';
+    var args = [cleanPath];
+    if (lay === 'bg') {
+      args.push('bg', 'opacity:0.25');
+    } else {
+      if (lay !== 'inline') args.push(lay);
+      if (imgSize) args.push(imgSize);
+    }
+    var tag = '@img(' + args.join(' | ') + ')';
+
+    src.focus();
+    var s = src.selectionStart;
+    var before = src.value.slice(0, s);
+    var prefix = (!before || before.slice(-1) === '\n') ? '' : '\n';
+    var full = prefix + tag + '\n';
+    typeText(full);
+    var pos = s + full.length;
+    src.setSelectionRange(pos, pos);
+    onInput();
+    scrollCaretIntoView();
+  }
+
+  function uploadAndInsertImageFile(file, layout) {
+    if (!file) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var dataUrl = String(fr.result || '');
+      fetch('/__upload-asset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name || 'image.png', data: dataUrl })
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (res) {
+          insertLocalImageRef(res.path, layout || imgLayout || 'inline', (file.name || '').replace(/\.[^.]+$/, ''));
+          toast('Saved ' + res.path + ' and inserted into deck');
+        })
+        .catch(function (err) {
+          toast('Could not save image: ' + err.message, 'err');
+        });
+    };
+    fr.onerror = function () { toast('Could not read ' + (file.name || 'image'), 'err'); };
+    fr.readAsDataURL(file);
+  }
+
+  function openImageModal() {
+    closeOverlays(true);
+    $('img-modal').classList.add('is-on');
+    $('img-path-input').value = '';
+    var listEl = $('img-workspace-list');
+    listEl.innerHTML = '<div class="img-empty">Scanning project folder…</div>';
+    fetch('/__assets')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var files = (data && data.files) ? data.files : [];
+        listEl.innerHTML = '';
+        if (!files.length) {
+          listEl.innerHTML = '<div class="img-empty">No images found in this folder yet. Browse, drop, or paste an image above.</div>';
+          return;
+        }
+        files.forEach(function (relPath) {
+          var card = document.createElement('button');
+          card.type = 'button';
+          card.className = 'img-card';
+          card.title = relPath;
+          if (!/\.(mp4|webm|mov|ogg)$/i.test(relPath)) {
+            var thumb = document.createElement('img');
+            thumb.className = 'img-card__thumb';
+            thumb.src = '/__local?path=' + encodeURIComponent(relPath);
+            thumb.alt = relPath;
+            card.appendChild(thumb);
+          }
+          var name = document.createElement('span');
+          name.className = 'img-card__name';
+          name.textContent = relPath;
+          card.appendChild(name);
+          card.addEventListener('click', function () {
+            closeOverlays();
+            insertLocalImageRef(relPath, imgLayout);
+          });
+          listEl.appendChild(card);
+        });
+      })
+      .catch(function () {
+        listEl.innerHTML = '<div class="img-empty">Could not list project images.</div>';
+      });
+    setTimeout(function () { $('img-path-input').focus(); }, 20);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('#img-layouts .img-layout'), function (btn) {
+    btn.addEventListener('click', function () {
+      imgLayout = btn.dataset.layout || 'inline';
+      Array.prototype.forEach.call(document.querySelectorAll('#img-layouts .img-layout'), function (b) {
+        b.classList.toggle('is-on', b === btn);
+      });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('#img-sizes .img-layout'), function (btn) {
+    btn.addEventListener('click', function () {
+      imgSize = btn.dataset.imgSize || '';
+      Array.prototype.forEach.call(document.querySelectorAll('#img-sizes .img-layout'), function (b) {
+        b.classList.toggle('is-on', b === btn);
+      });
+    });
+  });
+
+  $('img-upload-btn').addEventListener('click', function () { $('file-img').click(); });
+  $('file-img').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (f) {
+      closeOverlays();
+      uploadAndInsertImageFile(f, imgLayout);
+    }
+    e.target.value = '';
+  });
+  $('img-path-insert').addEventListener('click', function () {
+    var val = $('img-path-input').value.trim();
+    if (!val) return;
+    closeOverlays();
+    insertLocalImageRef(val, imgLayout);
+  });
+  $('img-path-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('img-path-insert').click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeOverlays();
+    }
+  });
+
+  // ── Span color / inline style wrapper ─────────────────────────────────
+  var SPAN_COLORS = [
+    { hex: '#bf4300', name: 'Burnt Orange' },
+    { hex: '#ef4444', name: 'Red' },
+    { hex: '#f97316', name: 'Orange' },
+    { hex: '#eab308', name: 'Amber' },
+    { hex: '#10b981', name: 'Emerald' },
+    { hex: '#06b6d4', name: 'Cyan' },
+    { hex: '#3b82f6', name: 'Blue' },
+    { hex: '#8b5cf6', name: 'Violet' },
+    { hex: '#ec4899', name: 'Pink' },
+    { hex: '#f43f5e', name: 'Rose' },
+    { hex: '#a855f7', name: 'Purple' },
+    { hex: '#14b8a6', name: 'Teal' }
+  ];
+
+  function escSpanAttr(s) {
+    return String(s || '').replace(/"/g, '&quot;').replace(/</g, '').replace(/>/g, '');
+  }
+
+  function normalizeSpanStyle(s) {
+    return String(s || '').trim().replace(/\s+/g, ' ').replace(/;?$/, ';').toLowerCase();
+  }
+
+  function spanPresetStyle(preset, color) {
+    var hex = color || state.spanColor || '#bf4300';
+    if (preset === 'badge') return 'color: ' + hex + '; background: ' + hex + '26; padding: 2px 8px; border-radius: 6px;';
+    if (preset === 'underline') return 'border-bottom: 2px solid ' + hex + '; padding-bottom: 1px;';
+    if (preset === 'unwrap') return null;
+    return 'color: ' + hex + ';';
+  }
+
+  function paintSpanMenu() {
+    var dot = $('span-dot');
+    if (dot) dot.style.background = state.spanColor;
+    var picker = $('span-color-picker');
+    if (picker && /^#[0-9a-f]{6}$/i.test(state.spanColor)) picker.value = state.spanColor;
+    var input = $('span-style-input');
+    if (input && document.activeElement !== input) input.value = state.spanStyle;
+    Array.prototype.forEach.call(document.querySelectorAll('#span-swatches .span-swatch'), function (b) {
+      b.classList.toggle('is-on', (b.dataset.color || '').toLowerCase() === state.spanColor.toLowerCase());
+    });
+  }
+
+  function setActiveSpanColor(hex, styleOverride) {
+    if (hex && /^#[0-9a-f]{6}$/i.test(hex)) {
+      state.spanColor = hex.toLowerCase();
+      lsSet(K.spanColor, state.spanColor);
+    }
+    var nextStyle = styleOverride !== undefined ? styleOverride : ('color: ' + state.spanColor + ';');
+    if (nextStyle && nextStyle.trim()) {
+      state.spanStyle = nextStyle.trim();
+      lsSet(K.spanStyle, state.spanStyle);
+    }
+    paintSpanMenu();
+  }
+
+  function buildSpanMenu() {
+    var host = $('span-swatches');
+    if (!host) return;
+    host.innerHTML = '';
+    SPAN_COLORS.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'span-swatch';
+      b.dataset.color = c.hex;
+      b.title = c.name + ' (' + c.hex + ')';
+      b.setAttribute('aria-label', c.name + ' ' + c.hex);
+      var chip = document.createElement('span');
+      chip.className = 'span-swatch__chip';
+      chip.style.background = c.hex;
+      b.appendChild(chip);
+      host.appendChild(b);
+    });
+    paintSpanMenu();
+  }
+
+  function replaceEditorRange(ed, start, end, replacement, selStart, selEnd) {
+    ed.focus();
+    ed.setSelectionRange(start, end);
+    var inserted = false;
+    try { inserted = document.execCommand('insertText', false, replacement); } catch (err) {}
+    if (!inserted) {
+      ed.setRangeText(replacement, start, end, 'end');
+    }
+    ed.setSelectionRange(selStart, selEnd);
+    if (ed === srcHtml) onHtmlInput();
+    else { onInput(); scrollCaretIntoView(); }
+  }
+
+  function wrapSelectionWithSpan(styleStr, toggleIfSame) {
+    var ed = state.kind === 'html' ? srcHtml : src;
+    var val = ed.value;
+    var s = ed.selectionStart || 0;
+    var e = ed.selectionEnd || 0;
+    var sel = val.slice(s, e);
+
+    var outerStart = s, outerEnd = e, inner = sel, existingTag = '';
+    var mFull = sel.match(/^(<span\b[^>]*>)([\s\S]*?)(<\/span>)$/i);
+    if (mFull) {
+      existingTag = mFull[1];
+      inner = mFull[2];
+    } else {
+      var mBefore = val.slice(0, s).match(/(<span\b[^>]*>)$/i);
+      var mAfter = val.slice(e).match(/^(<\/span>)/i);
+      if (mBefore && mAfter) {
+        existingTag = mBefore[1];
+        outerStart = s - mBefore[1].length;
+        outerEnd = e + mAfter[1].length;
+        inner = sel;
+      }
+    }
+
+    if (styleStr === null) {
+      if (!existingTag) {
+        toast('Select text inside a <span> to unwrap.', 'warn');
+        ed.focus();
+        return;
+      }
+      replaceEditorRange(ed, outerStart, outerEnd, inner, outerStart, outerStart + inner.length);
+      return;
+    }
+
+    var cleanStyle = String(styleStr || '').trim();
+    if (!cleanStyle) cleanStyle = 'color: ' + state.spanColor + ';';
+    if (cleanStyle.slice(-1) !== ';') cleanStyle += ';';
+
+    if (existingTag) {
+      var mStyle = existingTag.match(/\bstyle\s*=\s*"([^"]*)"/i) || existingTag.match(/\bstyle\s*=\s*'([^']*)'/i);
+      var curStyle = mStyle ? mStyle[1] : '';
+      if (toggleIfSame && curStyle && normalizeSpanStyle(curStyle) === normalizeSpanStyle(cleanStyle)) {
+        replaceEditorRange(ed, outerStart, outerEnd, inner, outerStart, outerStart + inner.length);
+        return;
+      }
+    }
+
+    var openTag = '<span style="' + escSpanAttr(cleanStyle) + '">';
+    var wrapped = openTag + inner + '</span>';
+    var innerStart = outerStart + openTag.length;
+    var innerEnd = innerStart + inner.length;
+    replaceEditorRange(ed, outerStart, outerEnd, wrapped, innerStart, innerEnd);
+  }
+
+  function wrapWithCurrentSpan() {
+    wrapSelectionWithSpan(state.spanStyle || ('color: ' + state.spanColor + ';'), true);
+  }
 
   // ── Actions ────────────────────────────────────────────────────────────
   function slugify(s) {
@@ -1337,7 +1754,8 @@
   function syncHtmlFrameTheme() {
     if (!frameHtml) return;
     try {
-      var root = frameHtml.contentDocument && frameHtml.contentDocument.documentElement;
+      var doc = frameHtml.contentDocument;
+      var root = doc && doc.documentElement;
       if (root) {
         root.dataset.theme = state.theme;
         root.dataset.decor = decorOf(state.theme);
@@ -1345,6 +1763,60 @@
         root.dataset.transition = state.transition;
         if (state.head) root.dataset.head = state.head; else delete root.dataset.head;
         if (state.body) root.dataset.body = state.body; else delete root.dataset.body;
+      }
+      if (doc && !doc.__drSyncBound) {
+        doc.__drSyncBound = true;
+        doc.addEventListener('dblclick', function (e) {
+          var targetEl = e.target;
+          if (!targetEl || !targetEl.closest) return;
+          var blockEl = targetEl.closest('h1, h2, h3, h4, h5, h6, li, p, td, th, blockquote, pre, img') || doc.body;
+          if (blockEl.tagName === 'IMG') {
+            var imgSrc = blockEl.getAttribute('src') || '';
+            var lm = imgSrc.match(/[?&]path=([^&]+)/);
+            if (lm) {
+              try { imgSrc = decodeURIComponent(lm[1].replace(/\+/g, ' ')); } catch (err) {}
+            }
+            syncHtmlToSourceFromPreview({
+              tag: 'img',
+              imgSrc: imgSrc,
+              imgAlt: blockEl.getAttribute('alt') || ''
+            });
+            return;
+          }
+          var sel = doc.getSelection ? doc.getSelection() : null;
+          var word = '';
+          var contextBefore = '';
+          var contextAfter = '';
+          if (sel && sel.rangeCount > 0) {
+            var range = sel.getRangeAt(0);
+            word = sel.toString().replace(/\s+/g, ' ').trim();
+            try {
+              if (blockEl.contains(range.startContainer)) {
+                var rBefore = doc.createRange();
+                rBefore.selectNodeContents(blockEl);
+                rBefore.setEnd(range.startContainer, range.startOffset);
+                var bStr = rBefore.toString().replace(/\s+/g, ' ');
+                contextBefore = bStr.slice(Math.max(0, bStr.length - 36)).trim();
+              }
+              if (blockEl.contains(range.endContainer)) {
+                var rAfter = doc.createRange();
+                rAfter.selectNodeContents(blockEl);
+                rAfter.setStart(range.endContainer, range.endOffset);
+                var aStr = rAfter.toString().replace(/\s+/g, ' ');
+                contextAfter = aStr.slice(0, 36).trim();
+              }
+            } catch (err) {}
+          }
+          var blockText = (blockEl.innerText || blockEl.textContent || '').replace(/\s+/g, ' ').trim();
+          try { if (sel) sel.removeAllRanges(); } catch (err) {}
+          syncHtmlToSourceFromPreview({
+            word: word,
+            blockText: blockText,
+            contextBefore: contextBefore,
+            contextAfter: contextAfter,
+            tag: (blockEl.tagName || '').toLowerCase()
+          });
+        });
       }
     } catch (e) {}
     try {
@@ -1669,7 +2141,7 @@
 
     if (state.kind === 'html') {
       srcHtml.value = readDeck(id);
-      frameHtml.srcdoc = srcHtml.value;
+      frameHtml.srcdoc = rewriteHtmlForPreview(srcHtml.value);
       renderHtmlCounts();
       if (announce) toast('Opened ' + meta.name);
       srcHtml.focus();
@@ -2000,6 +2472,8 @@
     else if (name === 'grid') setMode(state.mode === 'grid' ? 'single' : 'grid');
     else if (name === 'theme') openThemes();
     else if (name === 'guide') { guide.classList.add('is-on'); }
+    else if (name === 'image') openImageModal();
+    else if (name === 'span-wrap') { closeMenu(); wrapWithCurrentSpan(); }
     else if (name === 'palette') openPalette();
     else if (name === 'decks') openLibrary();
     else if (name === 'new') newDeck();
@@ -2024,6 +2498,9 @@
   src.addEventListener('input', onInput);
   src.addEventListener('scroll', syncScroll);
   src.addEventListener('click', updateCaretUi);
+  src.addEventListener('dblclick', function () {
+    setTimeout(syncPreviewFromSourceDblClick, 0);
+  });
   src.addEventListener('keyup', function (e) {
     if (e.key.indexOf('Arrow') === 0 || e.key === 'Home' || e.key === 'End' ||
         e.key === 'PageUp' || e.key === 'PageDown') updateCaretUi();
@@ -2044,8 +2521,23 @@
     scheduleSave();
     renderHtmlCounts();
     if (htmlPreviewTimer) clearTimeout(htmlPreviewTimer);
-    htmlPreviewTimer = setTimeout(function () { frameHtml.srcdoc = srcHtml.value; }, 140);
+    htmlPreviewTimer = setTimeout(function () { frameHtml.srcdoc = rewriteHtmlForPreview(srcHtml.value); }, 140);
   }
+
+  function handleMediaPaste(e) {
+    var cd = e.clipboardData;
+    if (!cd || !cd.files || !cd.files.length) return;
+    for (var i = 0; i < cd.files.length; i++) {
+      var f = cd.files[i];
+      if (/^image\//i.test(f.type) || /\.(png|jpe?g|gif|svg|webp|avif|bmp)$/i.test(f.name || '')) {
+        e.preventDefault();
+        uploadAndInsertImageFile(f, 'inline');
+        return;
+      }
+    }
+  }
+  src.addEventListener('paste', handleMediaPaste);
+  srcHtml.addEventListener('paste', handleMediaPaste);
 
   srcHtml.addEventListener('input', onHtmlInput);
   frameHtml.addEventListener('load', syncHtmlFrameTheme);
@@ -2089,9 +2581,11 @@
     if (!files || !files.length) return;
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
-      if (/\.(md|markdown|txt)$/i.test(f.name)) loadMarkdownFile(f);
+      if (/\.(png|jpe?g|gif|svg|webp|avif|bmp|mp4|webm|mov|ogg)$/i.test(f.name) || /^image\//i.test(f.type)) {
+        uploadAndInsertImageFile(f, 'inline');
+      } else if (/\.(md|markdown|txt)$/i.test(f.name)) loadMarkdownFile(f);
       else if (/\.html?$/i.test(f.name)) loadHtmlFile(f);
-      else toast('Skipped ' + f.name + '. Drop a Markdown or HTML file to open it.', 'warn');
+      else toast('Skipped ' + f.name + '. Drop an image, Markdown, or HTML file.', 'warn');
     }
   });
 
@@ -2160,6 +2654,7 @@
   });
 
   $('btn-guide').addEventListener('click', function () { runAction('guide'); });
+  $('btn-image').addEventListener('click', function () { runAction('image'); });
   $('btn-palette').addEventListener('click', openPalette);
   $('btn-new').addEventListener('click', function () { closeOverlays(); showStartScreen(); });
   // ── Dropdown menus ─────────────────────────────────────────────────────
@@ -2185,8 +2680,10 @@
     el.classList.add('is-open');
     var btn = el.querySelector('.btn');
     if (btn) btn.setAttribute('aria-expanded', 'true');
-    var first = el.querySelector('.menu__pop button');
-    if (first) first.focus();
+    if (el.id !== 'span-wrap') {
+      var first = el.querySelector('.menu__pop button');
+      if (first) first.focus();
+    }
   }
 
   /** Wires one dropdown: its trigger, its arrow keys, and its own Escape. */
@@ -2239,6 +2736,52 @@
     if (btn.dataset.template) setTemplate(btn.dataset.template, true);
     if (btn.dataset.transition) setTransition(btn.dataset.transition, true);
   }, 'button[data-template], button[data-transition]');
+
+  $('btn-span').addEventListener('mousedown', function (e) { e.preventDefault(); });
+  $('btn-span').addEventListener('click', function (e) {
+    e.stopPropagation();
+    toggleMenu($('span-wrap'));
+  });
+  $('span-menu').addEventListener('mousedown', function (e) {
+    if (e.target && e.target.tagName !== 'INPUT') e.preventDefault();
+  });
+  $('span-swatches').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button[data-color]') : null;
+    if (!btn) return;
+    var hex = btn.dataset.color;
+    var styleStr = 'color: ' + hex + ';';
+    setActiveSpanColor(hex, styleStr);
+    closeMenu();
+    wrapSelectionWithSpan(styleStr, false);
+  });
+  $('span-presets').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button[data-span-preset]') : null;
+    if (!btn) return;
+    var styleStr = spanPresetStyle(btn.dataset.spanPreset, state.spanColor);
+    if (styleStr !== null) setActiveSpanColor(null, styleStr);
+    closeMenu();
+    wrapSelectionWithSpan(styleStr, false);
+  });
+  $('span-color-picker').addEventListener('input', function () {
+    var hex = $('span-color-picker').value;
+    setActiveSpanColor(hex, 'color: ' + hex + ';');
+  });
+  $('span-apply-btn').addEventListener('click', function () {
+    var styleStr = ($('span-style-input').value || '').trim();
+    setActiveSpanColor(null, styleStr || ('color: ' + state.spanColor + ';'));
+    closeMenu();
+    wrapSelectionWithSpan(state.spanStyle, false);
+  });
+  $('span-style-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('span-apply-btn').click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeMenu();
+      (state.kind === 'html' ? srcHtml : src).focus();
+    }
+  });
 
   document.addEventListener('click', function (e) {
     if (openMenu && !openMenu.contains(e.target)) closeMenu();
@@ -2338,7 +2881,7 @@
     if (e.key === 'Escape') {
       if (menuIsOpen()) { e.preventDefault(); closeMenu(); src.focus(); return; }
       if (palette.classList.contains('is-on') || guide.classList.contains('is-on') ||
-          $('library').classList.contains('is-on')) {
+          $('library').classList.contains('is-on') || $('img-modal').classList.contains('is-on')) {
         e.preventDefault();
         closeOverlays();
       }
@@ -2370,15 +2913,17 @@
       else if (key === 'enter') { e.preventDefault(); present(); }
       else if (key === 'd' && md) { e.preventDefault(); insertSnippet(bySnippetId['slide-break']); }
       else if (key === 'b' && md) { e.preventDefault(); insertSnippet(bySnippetId.bold); }
+      else if (key === 'i' && e.shiftKey) { e.preventDefault(); openImageModal(); }
       else if (key === 'i' && md) { e.preventDefault(); insertSnippet(bySnippetId.italic); }
       else if (key === 'e' && md) { e.preventDefault(); insertSnippet(bySnippetId['inline-code']); }
+      else if (key === 'c' && e.shiftKey) { e.preventDefault(); runAction('span-wrap'); }
       else if (key === 'g' && md) { e.preventDefault(); runAction('grid'); }
       else if (key === 'l' && e.shiftKey) { e.preventDefault(); runAction('theme'); }
       return;
     }
 
     if (palette.classList.contains('is-on') || guide.classList.contains('is-on') ||
-        $('library').classList.contains('is-on') || menuIsOpen()) {
+        $('library').classList.contains('is-on') || $('img-modal').classList.contains('is-on') || menuIsOpen()) {
       return;
     }
 
@@ -2404,6 +2949,10 @@
   var splitPct = parseFloat(lsGet(K.split, '48'));
   if (!(splitPct > 15 && splitPct < 85)) splitPct = 48;
 
+  function isStackedLayout() {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+  }
+
   function applySplit() {
     paneEdit.style.flex = '0 0 ' + splitPct + '%';
     layout();
@@ -2411,18 +2960,23 @@
 
   divider.addEventListener('mousedown', function (e) {
     e.preventDefault();
+    var stacked = isStackedLayout();
     divider.classList.add('is-dragging');
-    document.body.style.cursor = 'col-resize';
+    document.body.classList.add('is-resizing-panes');
+    document.body.style.cursor = stacked ? 'row-resize' : 'col-resize';
 
     function move(ev) {
       var box = $('panes').getBoundingClientRect();
-      var pct = ((ev.clientX - box.left) / box.width) * 100;
-      splitPct = Math.max(18, Math.min(82, pct));
+      var pct = stacked
+        ? ((ev.clientY - box.top) / box.height) * 100
+        : ((ev.clientX - box.left) / box.width) * 100;
+      splitPct = Math.max(20, Math.min(80, pct));
       applySplit();
     }
 
     function up() {
       divider.classList.remove('is-dragging');
+      document.body.classList.remove('is-resizing-panes');
       document.body.style.cursor = '';
       lsSet(K.split, String(Math.round(splitPct)));
       document.removeEventListener('mousemove', move);
@@ -2441,6 +2995,452 @@
 
   window.addEventListener('resize', layout);
 
+  // ── Bidirectional double-click sync (Preview <-> Markdown/HTML source) ──
+  function stripMdWithMap(slideMd) {
+    var len = slideMd.length;
+    // 1 = keep char, 0 = hide char, 2 = emit single separator space
+    var mode = new Array(len);
+    for (var i = 0; i < len; i++) mode[i] = 1;
+
+    function hideRange(from, to) {
+      var a = Math.max(0, from);
+      var b = Math.min(len, to);
+      for (var k = a; k < b; k++) mode[k] = 0;
+    }
+
+    var fenceRanges = [];
+    var pos = 0;
+    var inFence = false;
+    var fenceChar = '';
+    var fenceStart = 0;
+    var lines = slideMd.split('\n');
+    for (var li = 0; li < lines.length; li++) {
+      var rawLine = lines[li];
+      var lineLen = rawLine.length;
+      var lineStart = pos;
+      pos += lineLen + 1;
+
+      var fm = rawLine.match(/^\s*(```+|~~~+)(.*)$/);
+      if (fm) {
+        hideRange(lineStart, lineStart + lineLen);
+        var fc = fm[1].charAt(0);
+        if (!inFence) {
+          inFence = true;
+          fenceChar = fc;
+          fenceStart = lineStart;
+        } else if (fc === fenceChar) {
+          inFence = false;
+          fenceRanges.push([fenceStart, lineStart + lineLen]);
+        }
+        continue;
+      }
+      if (inFence) continue;
+
+      if (/^\s*\|?(?:\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(rawLine)) {
+        hideRange(lineStart, lineStart + lineLen);
+        continue;
+      }
+
+      var prefix = rawLine.match(/^\s*(?:#{1,6}[ \t]+|(?:>[ \t]?)+|(?:[-*+]|\d+[.)])[ \t]+)/);
+      if (prefix) hideRange(lineStart, lineStart + prefix[0].length);
+
+      if (/^\s*#{1,6}[ \t]+/.test(rawLine)) {
+        var trailHash = rawLine.match(/[ \t]+#+\s*$/);
+        if (trailHash) hideRange(lineStart + rawLine.length - trailHash[0].length, lineStart + lineLen);
+      }
+      if (/^\s*\|.*\|\s*$/.test(rawLine)) {
+        for (var c = 0; c < lineLen; c++) {
+          if (rawLine.charAt(c) === '|') mode[lineStart + c] = 2;
+        }
+      }
+    }
+    if (inFence) fenceRanges.push([fenceStart, len]);
+
+    function inFenceAt(offset) {
+      for (var fi = 0; fi < fenceRanges.length; fi++) {
+        if (offset >= fenceRanges[fi][0] && offset <= fenceRanges[fi][1]) return true;
+      }
+      return false;
+    }
+
+    var codeRanges = [];
+    var btRe = /(`+)([^`\n]+?)\1/g;
+    var m;
+    while ((m = btRe.exec(slideMd)) !== null) {
+      if (inFenceAt(m.index)) continue;
+      hideRange(m.index, m.index + m[1].length);
+      hideRange(m.index + m[0].length - m[1].length, m.index + m[0].length);
+      codeRanges.push([m.index, m.index + m[0].length]);
+    }
+    function inCodeAt(offset) {
+      if (inFenceAt(offset)) return true;
+      for (var ci = 0; ci < codeRanges.length; ci++) {
+        if (offset >= codeRanges[ci][0] && offset < codeRanges[ci][1]) return true;
+      }
+      return false;
+    }
+
+    var maskPatterns = [
+      /<!--[\s\S]*?-->/g,
+      /@img\([^)\n]*\)/gi,
+      /!\[[^\]\n]*\]\([^)\n]*\)/g,
+      /\{reveal\}/gi,
+      /<\/?[a-zA-Z][^>\n]*>/g
+    ];
+    for (var pi = 0; pi < maskPatterns.length; pi++) {
+      var re = maskPatterns[pi];
+      re.lastIndex = 0;
+      while ((m = re.exec(slideMd)) !== null) {
+        if (inCodeAt(m.index)) continue;
+        hideRange(m.index, m.index + m[0].length);
+      }
+    }
+
+    var linkRe = /\[([^\]\n]+)\]\([^)\n]*\)/g;
+    while ((m = linkRe.exec(slideMd)) !== null) {
+      if (inCodeAt(m.index) || (m.index > 0 && slideMd.charAt(m.index - 1) === '!')) continue;
+      hideRange(m.index, m.index + 1);
+      hideRange(m.index + 1 + m[1].length, m.index + m[0].length);
+    }
+
+    var empPatterns = [
+      /(\*\*\*)([^*\n]+?)(\*\*\*)/g,
+      /(\*\*)([^*\n]+?)(\*\*)/g,
+      /(\*)([^*\s][^*\n]*?)(\*)/g,
+      /(__)([^_\n]+?)(__)/g,
+      /(~~)([^~\n]+?)(~~)/g,
+      /(\$\$)([\s\S]+?)(\$\$)/g,
+      /(\$)([^$\n]+?)(\$)/g
+    ];
+    for (var ei = 0; ei < empPatterns.length; ei++) {
+      var ere = empPatterns[ei];
+      ere.lastIndex = 0;
+      while ((m = ere.exec(slideMd)) !== null) {
+        if (inCodeAt(m.index)) continue;
+        hideRange(m.index, m.index + m[1].length);
+        hideRange(m.index + m[0].length - m[3].length, m.index + m[0].length);
+      }
+    }
+    var singleUnderRe = /(^|[^A-Za-z0-9_])_([^_\s][^_\n]*?)_(?=[^A-Za-z0-9_]|$)/g;
+    while ((m = singleUnderRe.exec(slideMd)) !== null) {
+      var uStart = m.index + m[1].length;
+      if (inCodeAt(uStart)) continue;
+      hideRange(uStart, uStart + 1);
+      hideRange(uStart + 1 + m[2].length, uStart + 1 + m[2].length + 1);
+    }
+
+    var plain = '';
+    var map = [];
+    var prevSpace = true;
+    for (var p = 0; p < len; p++) {
+      var mk = mode[p];
+      if (mk === 0) continue;
+      if (mk === 2) {
+        if (!prevSpace) {
+          plain += ' ';
+          map.push(p);
+          prevSpace = true;
+        }
+        continue;
+      }
+      var ch = slideMd.charAt(p);
+      if (/\s/.test(ch)) {
+        if (!prevSpace) {
+          plain += ' ';
+          map.push(p);
+          prevSpace = true;
+        }
+      } else {
+        plain += ch;
+        map.push(p);
+        prevSpace = false;
+      }
+    }
+    return { plain: plain, map: map, fenceRanges: fenceRanges };
+  }
+
+  function commonSuffixLen(a, b) {
+    var i = a.length - 1, j = b.length - 1, n = 0;
+    while (i >= 0 && j >= 0 && a.charAt(i) === b.charAt(j)) { n++; i--; j--; }
+    return n;
+  }
+
+  function commonPrefixLen(a, b) {
+    var lim = Math.min(a.length, b.length), n = 0;
+    while (n < lim && a.charAt(n) === b.charAt(n)) n++;
+    return n;
+  }
+
+  function tagMatchesRawLine(slideMd, rawPos, tag, fenceRanges) {
+    if (!tag) return false;
+    var ls = slideMd.lastIndexOf('\n', Math.max(0, rawPos - 1)) + 1;
+    var le = slideMd.indexOf('\n', rawPos);
+    if (le === -1) le = slideMd.length;
+    var line = slideMd.slice(ls, le);
+    if (/^h[1-6]$/.test(tag)) return /^\s*#{1,6}\s/.test(line);
+    if (tag === 'li') return /^\s*(?:[-*+]|\d+[.)])\s/.test(line);
+    if (tag === 'blockquote') return /^\s*>/.test(line);
+    if (tag === 'td' || tag === 'th') return /\|/.test(line);
+    if (tag === 'pre' || tag === 'code') {
+      if (fenceRanges) {
+        for (var fi = 0; fi < fenceRanges.length; fi++) {
+          if (rawPos >= fenceRanges[fi][0] && rawPos <= fenceRanges[fi][1]) return true;
+        }
+      }
+      return /`/.test(line);
+    }
+    if (tag === 'p') return !/^\s*(?:#{1,6}\s|[-*+]|\d+[.)]|>|\|)/.test(line);
+    return false;
+  }
+
+  function findImageRangeInSlide(slideMd, imgSrc, imgAlt) {
+    var srcNorm = (imgSrc || '').replace(/^(@local:|local:\/\/|file:\/\/)/i, '').trim();
+    var fileWithExt = srcNorm.split('/').pop() || '';
+    var fileNoExt = fileWithExt.replace(/\.[^.]+$/, '');
+    var altNorm = (imgAlt || '').trim().toLowerCase();
+    var lines = slideMd.split('\n');
+    var pos = 0;
+    var bestStart = -1, bestEnd = -1, bestScore = -1;
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var lineStart = pos;
+      pos += line.length + 1;
+      if (!/@img\(|!\[|<img\b/i.test(line)) continue;
+      var low = line.toLowerCase();
+      var score = 1;
+      if (srcNorm && low.indexOf(srcNorm.toLowerCase()) !== -1) score += 200;
+      else if (fileWithExt && low.indexOf(fileWithExt.toLowerCase()) !== -1) score += 140;
+      else if (fileNoExt && low.indexOf(fileNoExt.toLowerCase()) !== -1) score += 100;
+      if (altNorm && low.indexOf(altNorm) !== -1) score += 40;
+      if (score > bestScore) {
+        bestScore = score;
+        var atM = line.match(/@img\([^)\n]+\)/i) || line.match(/!\[[^\]\n]*\]\([^)\n]*\)/) || line.match(/<img\b[^>]*>/i);
+        if (atM) {
+          bestStart = lineStart + atM.index;
+          bestEnd = bestStart + atM[0].length;
+        } else {
+          bestStart = lineStart;
+          bestEnd = lineStart + line.length;
+        }
+      }
+    }
+    return bestStart >= 0 ? [bestStart, bestEnd] : null;
+  }
+
+  function findSourceRangeInSlide(slideMd, m) {
+    if (m.tag === 'img' || m.imgSrc || m.imgAlt) {
+      var imgRange = findImageRangeInSlide(slideMd, m.imgSrc, m.imgAlt);
+      if (imgRange) return imgRange;
+    }
+
+    var mapped = stripMdWithMap(slideMd);
+    var plain = mapped.plain;
+    var map = mapped.map;
+    var plainLow = plain.toLowerCase();
+
+    function pickBestNeedle(needle) {
+      var q = (needle || '').replace(/\s+/g, ' ').trim();
+      if (!q) return null;
+      var qLow = q.toLowerCase();
+      var cbLow = (m.contextBefore || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      var caLow = (m.contextAfter || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      var occ = m.occurrence || 0;
+      var idx = 0;
+      var ord = 0;
+      var best = null;
+
+      while ((idx = plainLow.indexOf(qLow, idx)) !== -1) {
+        var score = 0;
+        var prevCh = idx > 0 ? plainLow.charAt(idx - 1) : ' ';
+        var nextCh = idx + qLow.length < plainLow.length ? plainLow.charAt(idx + qLow.length) : ' ';
+        if (/^[a-z0-9]/i.test(qLow) && !/[a-z0-9_]/i.test(prevCh)) score += 20;
+        if (/[a-z0-9]$/i.test(qLow) && !/[a-z0-9_]/i.test(nextCh)) score += 20;
+
+        if (cbLow) {
+          var beforeSlice = plainLow.slice(Math.max(0, idx - 48), idx).trim();
+          score += commonSuffixLen(beforeSlice, cbLow) * 3;
+        }
+        if (caLow) {
+          var afterSlice = plainLow.slice(idx + qLow.length, idx + qLow.length + 48).trim();
+          score += commonPrefixLen(afterSlice, caLow) * 3;
+        }
+        if (map[idx] !== undefined && tagMatchesRawLine(slideMd, map[idx], m.tag, mapped.fenceRanges)) {
+          score += 35;
+        }
+        score -= Math.abs(ord - occ);
+
+        if (!best || score > best.score) {
+          best = { start: idx, end: idx + qLow.length, score: score };
+        }
+        ord++;
+        idx += 1;
+      }
+
+      if (!best || best.start >= map.length) return null;
+      var pEnd = Math.min(best.end - 1, map.length - 1);
+      var rStart = map[best.start];
+      var rEnd = map[pEnd] + 1;
+      return [rStart, Math.max(rStart, rEnd)];
+    }
+
+    var wordHit = pickBestNeedle(m.word);
+    if (wordHit) return wordHit;
+
+    var blockTrim = (m.blockText || '').replace(/\s+/g, ' ').trim();
+    if (blockTrim) {
+      var fullBlockHit = pickBestNeedle(blockTrim.slice(0, 64));
+      if (fullBlockHit) return fullBlockHit;
+
+      // Try individual significant tokens from blockText and jump to the best-scoring line.
+      var tokens = blockTrim.split(/\s+/).filter(function (w) { return w.length >= 3; });
+      tokens.sort(function (a, b) { return b.length - a.length; });
+      for (var ti = 0; ti < Math.min(tokens.length, 4); ti++) {
+        var tHit = pickBestNeedle(tokens[ti]);
+        if (tHit) return tHit;
+      }
+    }
+
+    // Fallback: land on the first non-whitespace character in this slide.
+    var first = 0;
+    while (first < slideMd.length && /\s/.test(slideMd.charAt(first))) first++;
+    return [first, first];
+  }
+
+  function syncToSourceFromPreview(m) {
+    if (state.kind !== 'markdown') return;
+    if (!state.slides.length) return;
+    var slideIdx = Math.max(0, Math.min(state.slides.length - 1, m.index || 0));
+    if (state.mode === 'grid') setMode('single');
+    setIndex(slideIdx, false);
+
+    var spans = slideMap();
+    if (!spans.length) return;
+    var span = spans[Math.min(slideIdx, spans.length - 1)];
+    var slideMd = src.value.slice(span[0], span[1]);
+    var range = findSourceRangeInSlide(slideMd, m);
+    var absStart = span[0] + range[0];
+    var absEnd = span[0] + range[1];
+
+    src.focus();
+    src.setSelectionRange(absStart, absEnd);
+    var top = offsetTop(absStart);
+    src.scrollTop = Math.max(0, top - src.clientHeight * 0.38);
+    syncScroll();
+    updateCaretUi();
+    flashEditorLines(absStart, absEnd);
+  }
+
+  function stripHtmlWithMap(rawHtml) {
+    var plain = '';
+    var map = [];
+    var prevSpace = true;
+    var inTag = false;
+    var skipTag = '';
+    var n = rawHtml.length;
+
+    for (var i = 0; i < n; i++) {
+      var ch = rawHtml.charAt(i);
+      if (skipTag) {
+        if (ch === '<' && rawHtml.slice(i, i + 2 + skipTag.length).toLowerCase() === '</' + skipTag) {
+          skipTag = '';
+          inTag = true;
+        }
+        continue;
+      }
+      if (!inTag && ch === '<' && /[a-zA-Z\/!]/.test(rawHtml.charAt(i + 1) || '')) {
+        inTag = true;
+        var head = rawHtml.slice(i + 1, i + 10).toLowerCase();
+        if (/^(script|style)\b/.test(head)) skipTag = head.match(/^(script|style)/)[1];
+        continue;
+      }
+      if (inTag) {
+        if (ch === '>') inTag = false;
+        continue;
+      }
+      if (/\s/.test(ch)) {
+        if (!prevSpace) {
+          plain += ' ';
+          map.push(i);
+          prevSpace = true;
+        }
+      } else {
+        plain += ch;
+        map.push(i);
+        prevSpace = false;
+      }
+    }
+    return { plain: plain, map: map };
+  }
+
+  function syncHtmlToSourceFromPreview(m) {
+    var raw = srcHtml.value || '';
+    var absStart = 0, absEnd = 0;
+
+    if (m.tag === 'img' || m.imgSrc || m.imgAlt) {
+      var imgHit = findImageRangeInSlide(raw, m.imgSrc, m.imgAlt);
+      if (imgHit) { absStart = imgHit[0]; absEnd = imgHit[1]; }
+    } else {
+      var mapped = stripHtmlWithMap(raw);
+      var plainLow = mapped.plain.toLowerCase();
+      var q = (m.word || m.blockText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      var cbLow = (m.contextBefore || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      var caLow = (m.contextAfter || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (q) {
+        var idx = 0, best = null;
+        while ((idx = plainLow.indexOf(q, idx)) !== -1) {
+          var score = 0;
+          if (cbLow) score += commonSuffixLen(plainLow.slice(Math.max(0, idx - 48), idx).trim(), cbLow) * 3;
+          if (caLow) score += commonPrefixLen(plainLow.slice(idx + q.length, idx + q.length + 48).trim(), caLow) * 3;
+          if (!best || score > best.score) best = { start: idx, end: idx + q.length, score: score };
+          idx += 1;
+        }
+        if (best && best.start < mapped.map.length) {
+          absStart = mapped.map[best.start];
+          absEnd = mapped.map[Math.min(best.end - 1, mapped.map.length - 1)] + 1;
+        }
+      }
+    }
+
+    srcHtml.focus();
+    srcHtml.setSelectionRange(absStart, absEnd);
+    var totalLines = Math.max(1, raw.split('\n').length);
+    var targetLine = raw.slice(0, absStart).split('\n').length - 1;
+    var approxLineH = Math.max(18, srcHtml.scrollHeight / totalLines);
+    srcHtml.scrollTop = Math.max(0, targetLine * approxLineH - srcHtml.clientHeight * 0.38);
+    renderHtmlCounts();
+  }
+
+  function cleanMdLineForMatch(line) {
+    if (!line) return '';
+    if (/@img\(|!\[/i.test(line)) return line.trim();
+    return line
+      .replace(/^\s*(?:#{1,6}[ \t]+|(?:>[ \t]?)+|(?:[-*+]|\d+[.)])[ \t]+)/, '')
+      .replace(/[ \t]+#+\s*$/, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\{reveal\}/gi, '')
+      .replace(/<\/?[a-zA-Z][^>\n]*>/g, '')
+      .replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1')
+      .replace(/[`*_~|$]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function syncPreviewFromSourceDblClick() {
+    if (state.kind !== 'markdown') return;
+    var pos = src.selectionStart;
+    var idx = caretSlide();
+    if (state.mode === 'grid') setMode('single');
+    setIndex(idx, false);
+    var ls = src.value.lastIndexOf('\n', Math.max(0, pos - 1)) + 1;
+    var le = src.value.indexOf('\n', pos);
+    if (le === -1) le = src.value.length;
+    var rawLine = src.value.slice(ls, le);
+    var word = src.value.slice(src.selectionStart, src.selectionEnd).replace(/\s+/g, ' ').trim();
+    var lineText = cleanMdLineForMatch(rawLine);
+    post({ type: 'flash-preview', index: idx, word: word, lineText: lineText });
+  }
+
   // ── Frame messages ─────────────────────────────────────────────────────
   window.addEventListener('message', function (e) {
     var m = e.data || {};
@@ -2454,6 +3454,8 @@
     } else if (m.type === 'goto') {
       setMode('single');
       setIndex(m.index, true);
+    } else if (m.type === 'sync-source') {
+      syncToSourceFromPreview(m);
     } else if (m.type === 'nav') {
       setIndex(state.index + m.delta, false);
     } else if (m.type === 'index-select') {
@@ -2485,6 +3487,7 @@
   document.documentElement.dataset.transition = state.transition;
   buildFontMenu();
   buildTemplateMenu();
+  buildSpanMenu();
   buildStartOptions();
   paintThemeButton();
   $('seg-single').classList.toggle('is-on', state.mode === 'single');
@@ -2505,7 +3508,7 @@
   function setFileContent(content) {
     if (state.kind === 'html') {
       srcHtml.value = content;
-      frameHtml.srcdoc = content;
+      frameHtml.srcdoc = rewriteHtmlForPreview(content);
       renderHtmlCounts();
       return;
     }
